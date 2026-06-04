@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.DS_Store
+
+# secrets & local db (never commit)
+.env
+server/.env
+server/db/nexus.db
+server/db/nexus.db-shm
+server/db/nexus.db-wal
+credentials.json
+token.json
+
+# personal data — never publish (your local copies stay; they're just not committed)
+.claude/settings.local.json
+server/resumes/*.tex
+server/resumes/*.pdf

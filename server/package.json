@@ -1,0 +1,22 @@
+{
+  "name": "nexus-server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Nexus backend — long-running Express agent host + shared SQLite context layer",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js",
+    "migrate:jobs": "node scripts/migrate-jobs.js",
+    "purge:jobs": "node scripts/purge-stale-jobs.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "better-sqlite3": "^11.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-cron": "^3.0.3",
+    "nodemailer": "^6.9.16"
+  }
+}

@@ -1,0 +1,1977 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NEXUS — Personal AI System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   NEXUS — Master Design File
+   Personal AI Operating System
+   Stage 1: Foundation + All Views (Static / Wired UI)
+   ============================================================ */
+
+:root {
+  /* Core palette */
+  --bg-base:       #080809;
+  --bg-surface:    #0f0f11;
+  --bg-raised:     #161619;
+  --bg-hover:      #1c1c20;
+  --bg-active:     #22222a;
+
+  /* Borders */
+  --border-dim:    rgba(255,255,255,0.05);
+  --border-soft:   rgba(255,255,255,0.09);
+  --border-mid:    rgba(255,255,255,0.14);
+
+  /* Text */
+  --text-primary:  #e8e6e0;
+  --text-secondary:#8a887f;
+  --text-dim:      #4a4845;
+
+  /* Accent — elder purple */
+  --accent:        #7c6fe0;
+  --accent-dim:    rgba(124,111,224,0.15);
+  --accent-glow:   rgba(124,111,224,0.08);
+
+  /* Agent colors */
+  --job:           #4ecba8;
+  --job-dim:       rgba(78,203,168,0.12);
+  --email:         #5b9cf6;
+  --email-dim:     rgba(91,156,246,0.12);
+  --council:       #b57bee;
+  --council-dim:   rgba(181,123,238,0.12);
+  --acct:          #f0a050;
+  --acct-dim:      rgba(240,160,80,0.12);
+  --news:          #e05b7a;
+  --news-dim:      rgba(224,91,122,0.12);
+  --project:       #7ec8e3;
+  --project-dim:   rgba(126,200,227,0.12);
+
+  /* Semantic */
+  --danger:        #e05b5b;
+  --success:       #4ecba8;
+  --warn:          #f0a050;
+
+  /* Layout */
+  --sidebar-w:     54px;
+  --topbar-h:      44px;
+
+  /* Typography */
+  --font-ui:       'Syne', sans-serif;
+  --font-mono:     'JetBrains Mono', monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* ── Scrollbars ── */
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-soft); border-radius: 2px; }
+
+/* ============================================================
+   LAYOUT SHELL
+   ============================================================ */
+
+.app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+}
+
+/* ── Sidebar ── */
+.sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-dim);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 0 16px;
+  gap: 2px;
+  z-index: 100;
+}
+
+.sidebar-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 14px;
+  cursor: pointer;
+  position: relative;
+}
+.sidebar-logo svg { width: 16px; height: 16px; stroke: #fff; }
+
+.nav-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+  position: relative;
+}
+.nav-btn:hover { background: var(--bg-raised); color: var(--text-secondary); }
+.nav-btn.active { background: var(--bg-active); color: var(--text-primary); }
+.nav-btn svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
+.nav-btn .nav-indicator {
+  position: absolute;
+  top: 7px; right: 7px;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  border: 1px solid var(--bg-surface);
+}
+
+.nav-divider {
+  width: 22px;
+  height: 1px;
+  background: var(--border-dim);
+  margin: 4px 0;
+}
+
+.nav-bottom { margin-top: auto; }
+
+/* Tooltip */
+.nav-btn[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  color: var(--text-primary);
+  font-size: 11px;
+  font-family: var(--font-ui);
+  padding: 4px 8px;
+  border-radius: 5px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 999;
+}
+
+/* ── Main area ── */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── Topbar ── */
+.topbar {
+  height: var(--topbar-h);
+  flex-shrink: 0;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border-dim);
+  display: flex;
+  align-items: center;
+  padding: 0 20px;
+  gap: 10px;
+}
+
+.topbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.02em;
+}
+.topbar-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+.topbar-spacer { flex: 1; }
+
+.topbar-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: 5px;
+  padding: 3px 8px;
+}
+.topbar-chip .dot {
+  width: 5px; height: 5px;
+  border-radius: 50%;
+}
+
+/* ── Content area ── */
+.content { flex: 1; overflow: hidden; position: relative; }
+
+.view {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  padding: 24px;
+  display: none;
+  flex-direction: column;
+  gap: 20px;
+  animation: fadeIn 0.2s ease;
+}
+.view.active { display: flex; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ============================================================
+   SHARED COMPONENTS
+   ============================================================ */
+
+.section-label {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  padding: 16px 18px;
+}
+.card-title {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.stat-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: 9px;
+  padding: 12px 14px;
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.tag {
+  display: inline-block;
+  font-size: 10px;
+  font-family: var(--font-mono);
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 500;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid var(--border-soft);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn:hover { background: var(--bg-hover); color: var(--text-primary); border-color: var(--border-mid); }
+.btn-primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent); }
+.btn-primary:hover { background: rgba(124,111,224,0.25); }
+
+.divider { height: 1px; background: var(--border-dim); margin: 4px 0; }
+
+/* Progress bar */
+.prog-track { height: 3px; background: var(--bg-active); border-radius: 2px; overflow: hidden; }
+.prog-fill { height: 100%; border-radius: 2px; transition: width 0.6s ease; }
+
+/* Agent status dot */
+.agent-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.agent-dot.active { background: var(--success); box-shadow: 0 0 6px var(--success); }
+.agent-dot.idle   { background: var(--text-dim); }
+.agent-dot.warn   { background: var(--warn); }
+
+/* ============================================================
+   VIEW: HOME / MORNING DIGEST
+   ============================================================ */
+
+.home-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.home-grid-full { grid-column: 1 / -1; }
+
+.digest-header {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+.digest-time {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+.digest-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.agent-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+.agent-row:last-child { border-bottom: none; }
+.agent-icon {
+  width: 30px; height: 30px;
+  border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.agent-icon svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.agent-info { flex: 1; min-width: 0; }
+.agent-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.agent-sub  { font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); margin-top: 1px; }
+
+.feed-item {
+  display: flex;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+.feed-item:last-child { border-bottom: none; }
+.feed-bar { width: 2px; flex-shrink: 0; border-radius: 2px; align-self: stretch; }
+.feed-body { flex: 1; min-width: 0; }
+.feed-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.feed-meta { font-size: 10px; color: var(--text-dim); font-family: var(--font-mono); margin-top: 3px; }
+
+/* Morning read card */
+.article-item {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-dim);
+  cursor: pointer;
+}
+.article-item:last-child { border-bottom: none; }
+.article-item:hover .article-title { color: var(--text-primary); }
+.article-source { font-size: 10px; font-family: var(--font-mono); color: var(--news); margin-bottom: 3px; }
+.article-title  { font-size: 12px; font-weight: 500; color: var(--text-secondary); line-height: 1.4; transition: color 0.15s; }
+.article-read   { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); margin-top: 3px; }
+
+/* ============================================================
+   VIEW: JOB BOARD
+   ============================================================ */
+
+.job-table { width: 100%; border-collapse: collapse; }
+.job-table th {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+  text-align: left;
+  padding: 0 12px 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-dim);
+}
+.job-table td {
+  padding: 11px 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-dim);
+  vertical-align: middle;
+}
+.job-table tr:last-child td { border-bottom: none; }
+.job-table tr:hover td { background: var(--bg-raised); }
+.job-company { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.job-title-cell { color: var(--text-secondary); }
+
+.match-cell { display: flex; align-items: center; gap: 8px; }
+.match-pct { font-size: 12px; font-weight: 600; font-family: var(--font-mono); min-width: 32px; }
+.match-mini { width: 50px; height: 3px; background: var(--bg-active); border-radius: 2px; overflow: hidden; }
+.match-mini-fill { height: 100%; border-radius: 2px; }
+
+.track-timeline {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-top: 12px;
+}
+.track-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+.track-node {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-soft);
+  background: var(--bg-surface);
+  position: relative;
+  z-index: 1;
+}
+.track-node.done { background: var(--job); border-color: var(--job); }
+.track-node.current { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.track-label { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); text-align: center; }
+.track-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border-dim);
+  margin-top: -17px;
+}
+.track-line.done { background: var(--job); }
+
+/* ============================================================
+   VIEW: SECOND BRAIN (GRAPH)
+   ============================================================ */
+
+.graph-container {
+  flex: 1;
+  min-height: 500px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+}
+#graph-canvas { width: 100%; height: 100%; display: block; }
+
+.graph-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.graph-btn {
+  width: 28px; height: 28px;
+  border-radius: 6px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border-soft);
+  color: var(--text-secondary);
+  font-size: 14px;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+.graph-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+.graph-legend {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  background: rgba(15,15,17,0.85);
+  border: 1px solid var(--border-dim);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.legend-row { display: flex; align-items: center; gap: 7px; font-size: 11px; color: var(--text-secondary); font-family: var(--font-mono); }
+.legend-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+/* ============================================================
+   VIEW: JOURNAL
+   ============================================================ */
+
+.journal-layout {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+}
+
+.journal-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.editor-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-date {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-dim);
+}
+
+textarea.journal-input {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 16px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.7;
+  resize: none;
+  min-height: 240px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+textarea.journal-input:focus { border-color: var(--border-mid); }
+textarea.journal-input::placeholder { color: var(--text-dim); }
+
+.auto-tags {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.auto-tag-label { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); margin-right: 2px; }
+
+.journal-entries { display: flex; flex-direction: column; gap: 8px; }
+.entry-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 9px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.entry-item:hover { border-color: var(--border-soft); background: var(--bg-raised); }
+.entry-item.active { border-color: var(--accent); }
+.entry-date { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); margin-bottom: 4px; }
+.entry-preview { font-size: 12px; color: var(--text-secondary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.entry-tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+
+/* ============================================================
+   VIEW: GOALS
+   ============================================================ */
+
+.goal-item {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+.goal-item:last-child { border-bottom: none; }
+.goal-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.goal-name { font-size: 13px; font-weight: 600; color: var(--text-primary); flex: 1; }
+.goal-pct { font-size: 13px; font-weight: 600; font-family: var(--font-mono); }
+.goal-meta { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); margin-top: 5px; }
+
+/* ============================================================
+   VIEW: CALENDAR
+   ============================================================ */
+
+.cal-layout { display: grid; grid-template-columns: 1fr 280px; gap: 16px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+.cal-header-day { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); text-align: center; padding: 6px 0; }
+.cal-cell {
+  aspect-ratio: 1;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background 0.1s;
+  position: relative;
+  gap: 2px;
+}
+.cal-cell:hover { background: var(--bg-raised); color: var(--text-secondary); }
+.cal-cell.has-event { color: var(--text-secondary); }
+.cal-cell.today { background: var(--accent); color: #fff; font-weight: 600; }
+.cal-cell .event-dots { display: flex; gap: 2px; }
+.cal-cell .event-dot { width: 3px; height: 3px; border-radius: 50%; }
+
+.event-list { display: flex; flex-direction: column; gap: 8px; }
+.event-item {
+  background: var(--bg-raised);
+  border-radius: 8px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--border-soft);
+}
+.event-title { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.event-time  { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); margin-top: 2px; }
+.event-agent { font-size: 10px; font-family: var(--font-mono); margin-top: 4px; }
+
+/* ============================================================
+   VIEW: COUNCIL OF 5
+   ============================================================ */
+
+.council-layout { display: flex; flex-direction: column; gap: 16px; flex: 1; }
+
+.elder-panel {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.elder-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 12px 10px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  position: relative;
+}
+.elder-card:hover { border-color: var(--border-soft); background: var(--bg-raised); }
+.elder-card.active { border-color: var(--council); }
+.elder-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 8px;
+  font-size: 14px;
+  font-weight: 700;
+}
+.elder-name { font-size: 12px; font-weight: 600; color: var(--text-primary); margin-bottom: 2px; }
+.elder-archetype { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); margin-bottom: 6px; }
+.elder-desc { font-size: 10px; color: var(--text-dim); line-height: 1.4; }
+
+/* Stance indicator */
+.elder-stance {
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  font-family: var(--font-mono);
+  padding: 2px 7px;
+  border-radius: 4px 4px 0 0;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+/* Consensus bar */
+.consensus-bar {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+.consensus-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.consensus-label { font-size: 11px; font-family: var(--font-mono); color: var(--text-dim); }
+.consensus-value { font-size: 11px; font-family: var(--font-mono); color: var(--text-primary); font-weight: 500; }
+.consensus-track {
+  height: 6px;
+  background: var(--bg-active);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+}
+.consensus-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--danger) 0%, var(--warn) 40%, var(--success) 100%);
+  transition: width 0.8s ease;
+}
+.consensus-markers {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 5px;
+}
+.consensus-marker { font-size: 9px; font-family: var(--font-mono); color: var(--text-dim); }
+
+/* Council input */
+.council-input-area {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+textarea.council-ask {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  min-height: 60px;
+}
+textarea.council-ask::placeholder { color: var(--text-dim); }
+.council-input-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-dim);
+}
+
+/* Responses */
+.council-responses { display: flex; flex-direction: column; gap: 10px; }
+.council-response {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color 0.15s;
+}
+.council-response:hover { border-color: var(--border-soft); }
+.response-header {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+.response-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  flex-shrink: 0;
+}
+.response-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.response-arch { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); margin-left: 2px; }
+.response-text { font-size: 12px; color: var(--text-secondary); line-height: 1.65; }
+.response-challenge {
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--border-dim);
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+}
+.response-challenge span { font-weight: 600; }
+
+/* ============================================================
+   VIEW: ACCOUNTABILITY
+   ============================================================ */
+
+.acct-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.acct-full { grid-column: 1 / -1; }
+
+.streak-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.streak-card {
+  background: var(--bg-raised);
+  border: 1px solid var(--border-dim);
+  border-radius: 9px;
+  padding: 12px;
+  text-align: center;
+}
+.streak-num { font-size: 24px; font-weight: 600; font-family: var(--font-mono); line-height: 1; margin-bottom: 4px; }
+.streak-label { font-size: 10px; font-family: var(--font-mono); color: var(--text-secondary); }
+.streak-status { font-size: 9px; font-family: var(--font-mono); margin-top: 3px; }
+
+.checkin-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+.checkin-item:last-child { border-bottom: none; }
+.check-box {
+  width: 16px; height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid var(--border-mid);
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.check-box.done { background: var(--success); border-color: var(--success); }
+.check-box.done::after { content: ''; width: 4px; height: 7px; border: 1.5px solid #fff; border-top: none; border-left: none; transform: rotate(45deg) translate(-1px,-1px); display: block; }
+.checkin-label { flex: 1; font-size: 12px; color: var(--text-secondary); }
+.checkin-label.done { text-decoration: line-through; color: var(--text-dim); }
+.checkin-time { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); }
+
+/* Agent message preview */
+.agent-msg {
+  background: var(--bg-raised);
+  border-radius: 8px;
+  padding: 12px 14px;
+  border-left: 2px solid var(--acct);
+}
+.agent-msg-from { font-size: 10px; font-family: var(--font-mono); color: var(--acct); margin-bottom: 5px; }
+.agent-msg-text { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+
+/* ============================================================
+   VIEW: PROJECTS
+   ============================================================ */
+
+.project-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-dim);
+  border-radius: 12px;
+  padding: 16px 18px;
+  transition: border-color 0.15s;
+}
+.project-card:hover { border-color: var(--border-soft); }
+.project-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.project-icon {
+  width: 32px; height: 32px;
+  border-radius: 7px;
+  background: var(--project-dim);
+  border: 1px solid rgba(126,200,227,0.2);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.project-icon svg { width: 14px; height: 14px; stroke: var(--project); fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.project-name { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.project-desc { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.project-meta { display: flex; gap: 6px; align-items: center; margin-top: 6px; flex-wrap: wrap; }
+
+.change-log { display: flex; flex-direction: column; gap: 0; }
+.change-entry {
+  display: flex;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+.change-entry:last-child { border-bottom: none; }
+.change-time { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); min-width: 80px; flex-shrink: 0; padding-top: 1px; }
+.change-text { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.change-ai-note { font-size: 11px; color: var(--text-dim); margin-top: 3px; font-style: italic; }
+
+/* ============================================================
+   MODAL / OVERLAY
+   ============================================================ */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 24px;
+  width: 480px;
+  max-width: 90vw;
+  animation: fadeIn 0.15s ease;
+}
+.modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.modal-title { font-size: 15px; font-weight: 600; }
+.modal-close { background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+.modal-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ============================================================
+   RESPONSIVE / UTILITY
+   ============================================================ */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.text-mono { font-family: var(--font-mono); }
+.text-dim { color: var(--text-dim); }
+.text-secondary { color: var(--text-secondary); }
+.text-sm { font-size: 12px; }
+.text-xs { font-size: 11px; }
+.w-full { width: 100%; }
+.flex-1 { flex: 1; min-width: 0; }
+
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ═══════════════════════════════════════════
+       SIDEBAR
+  ═══════════════════════════════════════════ -->
+  <nav class="sidebar">
+    <div class="sidebar-logo" onclick="showView('home')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+    </div>
+
+    <button class="nav-btn active" data-view="home" data-tip="Morning digest" onclick="showView('home',this)">
+      <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      <span class="nav-indicator" style="background:var(--news)"></span>
+    </button>
+
+    <button class="nav-btn" data-view="jobs" data-tip="Job board" onclick="showView('jobs',this)">
+      <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+      <span class="nav-indicator" style="background:var(--job)"></span>
+    </button>
+
+    <button class="nav-btn" data-view="graph" data-tip="Second brain" onclick="showView('graph',this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="19" r="2"/><path d="M12 7v4M12 11l-5.5 6M12 11l5.5 6"/></svg>
+    </button>
+
+    <div class="nav-divider"></div>
+
+    <button class="nav-btn" data-view="journal" data-tip="Journal" onclick="showView('journal',this)">
+      <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>
+    </button>
+
+    <button class="nav-btn" data-view="goals" data-tip="Goals" onclick="showView('goals',this)">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+    </button>
+
+    <button class="nav-btn" data-view="calendar" data-tip="Calendar" onclick="showView('calendar',this)">
+      <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    </button>
+
+    <div class="nav-divider"></div>
+
+    <button class="nav-btn" data-view="council" data-tip="Council of 5" onclick="showView('council',this)">
+      <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+      <span class="nav-indicator" style="background:var(--council)"></span>
+    </button>
+
+    <button class="nav-btn" data-view="accountability" data-tip="Accountability" onclick="showView('accountability',this)">
+      <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+      <span class="nav-indicator" style="background:var(--acct)"></span>
+    </button>
+
+    <button class="nav-btn" data-view="projects" data-tip="Projects" onclick="showView('projects',this)">
+      <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+    </button>
+
+    <div class="nav-bottom">
+      <button class="nav-btn" data-tip="Settings">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════════════════════════════
+       MAIN
+  ═══════════════════════════════════════════ -->
+  <div class="main">
+
+    <!-- Topbar -->
+    <header class="topbar">
+      <span class="topbar-title" id="topbar-title">Morning digest</span>
+      <span class="topbar-sub" id="topbar-sub">· good morning</span>
+      <div class="topbar-spacer"></div>
+      <div class="topbar-chip"><span class="dot" style="background:var(--success)"></span>5 agents active</div>
+      <div class="topbar-chip">Thu Jun 4</div>
+      <div class="topbar-chip" style="font-family:var(--font-mono);" id="live-time">--:--</div>
+    </header>
+
+    <div class="content">
+
+      <!-- ══════════════════════════════════
+           VIEW: HOME
+      ══════════════════════════════════ -->
+      <div class="view active" id="view-home">
+
+        <!-- Greeting + stats -->
+        <div>
+          <div class="digest-header">
+            <span class="digest-time" id="greeting-time">07:24</span>
+            <span class="digest-date">Thursday, June 4, 2026</span>
+          </div>
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--job)">12</div>
+              <div class="stat-label">new job matches</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--email)">3</div>
+              <div class="stat-label">urgent emails</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--acct)">5</div>
+              <div class="stat-label">day gym streak</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-value" style="color:var(--danger)">2</div>
+              <div class="stat-label">deadlines this week</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="home-grid">
+          <!-- Agent status -->
+          <div class="card">
+            <div class="card-title">agents</div>
+            <div class="agent-row">
+              <div class="agent-icon" style="background:var(--job-dim)"><svg style="stroke:var(--job)"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg></div>
+              <div class="agent-info"><div class="agent-name">Job agent</div><div class="agent-sub">next scan in 2d 14h · 47 listings tracked</div></div>
+              <div class="agent-dot active"></div>
+            </div>
+            <div class="agent-row">
+              <div class="agent-icon" style="background:var(--email-dim)"><svg style="stroke:var(--email)"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
+              <div class="agent-info"><div class="agent-name">Email agent</div><div class="agent-sub">scanned 47 emails · 3 flagged</div></div>
+              <div class="agent-dot active"></div>
+            </div>
+            <div class="agent-row">
+              <div class="agent-icon" style="background:var(--council-dim)"><svg style="stroke:var(--council)"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg></div>
+              <div class="agent-info"><div class="agent-name">Council of 5</div><div class="agent-sub">ready to consult</div></div>
+              <div class="agent-dot idle"></div>
+            </div>
+            <div class="agent-row">
+              <div class="agent-icon" style="background:var(--acct-dim)"><svg style="stroke:var(--acct)"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></div>
+              <div class="agent-info"><div class="agent-name">Accountability</div><div class="agent-sub">check-in at 8pm</div></div>
+              <div class="agent-dot warn"></div>
+            </div>
+            <div class="agent-row">
+              <div class="agent-icon" style="background:var(--news-dim)"><svg style="stroke:var(--news)"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></div>
+              <div class="agent-info"><div class="agent-name">Morning brief</div><div class="agent-sub">5 articles · 10min read ready</div></div>
+              <div class="agent-dot active"></div>
+            </div>
+          </div>
+
+          <!-- Agent feed -->
+          <div class="card">
+            <div class="card-title">agent feed</div>
+            <div class="feed-item">
+              <div class="feed-bar" style="background:var(--job)"></div>
+              <div class="feed-body"><div class="feed-text">Job agent found 12 new matches above 75% — Atlanta, Remote</div><div class="feed-meta">2 hours ago · job-agent</div></div>
+            </div>
+            <div class="feed-item">
+              <div class="feed-bar" style="background:var(--email)"></div>
+              <div class="feed-body"><div class="feed-text">Email agent flagged deadline: "Application due Fri Jun 6" from Stripe recruiter</div><div class="feed-meta">4 hours ago · email-agent</div></div>
+            </div>
+            <div class="feed-item">
+              <div class="feed-bar" style="background:var(--acct)"></div>
+              <div class="feed-body"><div class="feed-text">Gym logged — streak extended to 5 days. DSA sessions still behind pace</div><div class="feed-meta">9 hours ago · accountability</div></div>
+            </div>
+            <div class="feed-item">
+              <div class="feed-bar" style="background:var(--email)"></div>
+              <div class="feed-body"><div class="feed-text">Email agent updated job board: Notion application → "Interview scheduled"</div><div class="feed-meta">yesterday · email-agent</div></div>
+            </div>
+            <div class="feed-item">
+              <div class="feed-bar" style="background:var(--project)"></div>
+              <div class="feed-body"><div class="feed-text">Project archivist: 3 commits to job-agent — refactored scoring pipeline</div><div class="feed-meta">yesterday · project-archivist</div></div>
+            </div>
+          </div>
+
+          <!-- Morning read -->
+          <div class="card">
+            <div class="card-title">morning brief · 10 min read</div>
+            <div class="article-item">
+              <div class="flex-1">
+                <div class="article-source">technology</div>
+                <div class="article-title">Anthropic releases Claude 4 with extended reasoning — what developers need to know</div>
+                <div class="article-read">3 min read</div>
+              </div>
+            </div>
+            <div class="article-item">
+              <div class="flex-1">
+                <div class="article-source">career</div>
+                <div class="article-title">Tech hiring in Atlanta is quietly recovering — data roles up 18% YoY</div>
+                <div class="article-read">2 min read</div>
+              </div>
+            </div>
+            <div class="article-item">
+              <div class="flex-1">
+                <div class="article-source">world</div>
+                <div class="article-title">Fed holds rates steady — markets react with cautious optimism heading into Q3</div>
+                <div class="article-read">2 min read</div>
+              </div>
+            </div>
+            <div class="article-item">
+              <div class="flex-1">
+                <div class="article-source">technology</div>
+                <div class="article-title">Why the best junior engineers document everything — and how to start today</div>
+                <div class="article-read">3 min read</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Goals snapshot -->
+          <div class="card">
+            <div class="card-title">goals snapshot</div>
+            <div class="goal-item" style="padding:10px 0">
+              <div class="goal-header">
+                <span class="goal-name" style="font-size:12px">Land a job offer</span>
+                <span class="goal-pct" style="color:var(--accent);font-size:12px">35%</span>
+              </div>
+              <div class="prog-track"><div class="prog-fill" style="width:35%;background:var(--accent)"></div></div>
+            </div>
+            <div class="goal-item" style="padding:10px 0">
+              <div class="goal-header">
+                <span class="goal-name" style="font-size:12px">Gym 5x/week</span>
+                <span class="goal-pct" style="color:var(--success);font-size:12px">80%</span>
+              </div>
+              <div class="prog-track"><div class="prog-fill" style="width:80%;background:var(--success)"></div></div>
+            </div>
+            <div class="goal-item" style="padding:10px 0;border-bottom:none">
+              <div class="goal-header">
+                <span class="goal-name" style="font-size:12px">Build the dashboard</span>
+                <span class="goal-pct" style="color:var(--warn);font-size:12px">20%</span>
+              </div>
+              <div class="prog-track"><div class="prog-fill" style="width:20%;background:var(--warn)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: JOB BOARD
+      ══════════════════════════════════ -->
+      <div class="view" id="view-jobs">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-value" style="color:var(--job)">47</div><div class="stat-label">total listings</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--success)">18</div><div class="stat-label">entry level fit</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--warn)">4</div><div class="stat-label">applied</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--accent)">2</div><div class="stat-label">interviews</div></div>
+        </div>
+
+        <div class="card">
+          <div class="flex items-center justify-between" style="margin-bottom:12px">
+            <div class="card-title" style="margin-bottom:0">all listings</div>
+            <div class="flex gap-2">
+              <span class="tag" style="background:var(--job-dim);color:var(--job);cursor:pointer">all tracks</span>
+              <span class="tag" style="background:var(--bg-raised);color:var(--text-secondary);cursor:pointer">entry only</span>
+              <span class="tag" style="background:var(--bg-raised);color:var(--text-secondary);cursor:pointer">applied</span>
+            </div>
+          </div>
+          <table class="job-table">
+            <thead>
+              <tr>
+                <th>company</th>
+                <th>role</th>
+                <th>location</th>
+                <th>match</th>
+                <th>level</th>
+                <th>status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="job-company">Stripe</div></td>
+                <td class="job-title-cell">Data Analyst</td>
+                <td class="text-mono text-xs">Remote</td>
+                <td><div class="match-cell"><span class="match-pct" style="color:var(--success)">92%</span><div class="match-mini"><div class="match-mini-fill" style="width:92%;background:var(--success)"></div></div></div></td>
+                <td><span class="tag" style="background:var(--job-dim);color:var(--job)">Entry</span></td>
+                <td><span class="badge" style="background:var(--warn);background:rgba(240,160,80,0.15);color:var(--warn)">Apply by Fri</span></td>
+              </tr>
+              <tr>
+                <td><div class="job-company">Notion</div></td>
+                <td class="job-title-cell">Analytics Engineer</td>
+                <td class="text-mono text-xs">Remote</td>
+                <td><div class="match-cell"><span class="match-pct" style="color:var(--success)">87%</span><div class="match-mini"><div class="match-mini-fill" style="width:87%;background:var(--success)"></div></div></div></td>
+                <td><span class="tag" style="background:var(--job-dim);color:var(--job)">Entry</span></td>
+                <td><span class="badge" style="background:var(--accent-dim);color:var(--accent)">Interview Scheduled</span></td>
+              </tr>
+              <tr>
+                <td><div class="job-company">Linear</div></td>
+                <td class="job-title-cell">Backend Engineer</td>
+                <td class="text-mono text-xs">Remote</td>
+                <td><div class="match-cell"><span class="match-pct" style="color:var(--success)">89%</span><div class="match-mini"><div class="match-mini-fill" style="width:89%;background:var(--success)"></div></div></div></td>
+                <td><span class="tag" style="background:var(--job-dim);color:var(--job)">Entry</span></td>
+                <td><span class="badge" style="background:var(--bg-raised);color:var(--text-secondary)">Not applied</span></td>
+              </tr>
+              <tr>
+                <td><div class="job-company">HubSpot</div></td>
+                <td class="job-title-cell">Data Analyst II</td>
+                <td class="text-mono text-xs">Atlanta</td>
+                <td><div class="match-cell"><span class="match-pct" style="color:var(--email)">81%</span><div class="match-mini"><div class="match-mini-fill" style="width:81%;background:var(--email)"></div></div></div></td>
+                <td><span class="tag" style="background:var(--job-dim);color:var(--job)">Entry</span></td>
+                <td><span class="badge" style="background:var(--bg-raised);color:var(--text-secondary)">Not applied</span></td>
+              </tr>
+              <tr>
+                <td><div class="job-company">Supabase</div></td>
+                <td class="job-title-cell">Node.js Engineer</td>
+                <td class="text-mono text-xs">Remote</td>
+                <td><div class="match-cell"><span class="match-pct" style="color:var(--email)">79%</span><div class="match-mini"><div class="match-mini-fill" style="width:79%;background:var(--email)"></div></div></div></td>
+                <td><span class="tag" style="background:rgba(240,160,80,0.12);color:var(--warn)">Stretch</span></td>
+                <td><span class="badge" style="background:var(--accent-dim);color:var(--accent)">Technical Screen</span></td>
+              </tr>
+              <tr>
+                <td><div class="job-company">Vercel</div></td>
+                <td class="job-title-cell">Full Stack Engineer</td>
+                <td class="text-mono text-xs">Remote</td>
+                <td><div class="match-cell"><span class="match-pct" style="color:var(--email)">83%</span><div class="match-mini"><div class="match-mini-fill" style="width:83%;background:var(--email)"></div></div></div></td>
+                <td><span class="tag" style="background:rgba(240,160,80,0.12);color:var(--warn)">Stretch</span></td>
+                <td><span class="badge" style="background:var(--bg-raised);color:var(--text-secondary)">Not applied</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card">
+          <div class="card-title">application tracker</div>
+          <div style="margin-bottom:12px">
+            <div class="flex items-center justify-between" style="margin-bottom:8px">
+              <span style="font-size:13px;font-weight:600">Notion — Analytics Engineer</span>
+              <span class="badge" style="background:var(--accent-dim);color:var(--accent)">Interview Scheduled</span>
+            </div>
+            <div class="track-timeline">
+              <div class="track-step"><div class="track-node done"></div><div class="track-label">applied</div></div>
+              <div class="track-line done"></div>
+              <div class="track-step"><div class="track-node done"></div><div class="track-label">screen</div></div>
+              <div class="track-line done"></div>
+              <div class="track-step"><div class="track-node current"></div><div class="track-label">interview</div></div>
+              <div class="track-line"></div>
+              <div class="track-step"><div class="track-node"></div><div class="track-label">offer</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: SECOND BRAIN
+      ══════════════════════════════════ -->
+      <div class="view" id="view-graph" style="gap:12px">
+        <div class="graph-container" style="flex:1">
+          <canvas id="graph-canvas"></canvas>
+          <div class="graph-legend">
+            <div class="legend-row"><div class="legend-dot" style="background:var(--council)"></div>journal entries</div>
+            <div class="legend-row"><div class="legend-dot" style="background:var(--email)"></div>notes</div>
+            <div class="legend-row"><div class="legend-dot" style="background:var(--text-dim)"></div>untagged</div>
+          </div>
+          <div class="graph-controls">
+            <button class="graph-btn" onclick="graphZoom(1.2)">+</button>
+            <button class="graph-btn" onclick="graphZoom(0.8)">−</button>
+            <button class="graph-btn" onclick="resetGraph()">⊙</button>
+          </div>
+        </div>
+        <div class="card" style="flex-shrink:0">
+          <div class="card-title">click a node to preview</div>
+          <div id="graph-preview" style="font-size:12px;color:var(--text-dim);font-family:var(--font-mono)">— no node selected —</div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: JOURNAL
+      ══════════════════════════════════ -->
+      <div class="view" id="view-journal" style="flex:1">
+        <div class="journal-layout" style="flex:1;min-height:0">
+          <div class="journal-editor">
+            <div class="card" style="flex:1">
+              <div class="editor-meta" style="margin-bottom:12px">
+                <span class="editor-date">Thu Jun 4, 2026</span>
+                <div style="flex:1"></div>
+                <button class="btn btn-primary" style="font-size:11px;padding:5px 12px">Save + auto-tag</button>
+              </div>
+              <textarea class="journal-input" placeholder="What's on your mind today...
+
+Write freely. The AI will read this, extract tags, and connect it to related notes in your second brain automatically."></textarea>
+              <div class="auto-tags mt-2">
+                <span class="auto-tag-label">ai tags:</span>
+                <span class="tag" style="background:var(--job-dim);color:var(--job)"># career</span>
+                <span class="tag" style="background:var(--accent-dim);color:var(--accent)"># self-reflection</span>
+                <span class="tag" style="background:var(--project-dim);color:var(--project)"># projects</span>
+                <span class="tag" style="background:var(--bg-raised);color:var(--text-dim)">+ add tag</span>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div class="section-label">recent entries</div>
+            <div class="journal-entries">
+              <div class="entry-item active">
+                <div class="entry-date">Wed Jun 3</div>
+                <div class="entry-preview">Felt good after the technical screen with Supabase. Need to review system design patterns before the next round. Also started the D3 graph prototype...</div>
+                <div class="entry-tags">
+                  <span class="tag" style="background:var(--job-dim);color:var(--job)"># career</span>
+                  <span class="tag" style="background:var(--project-dim);color:var(--project)"># projects</span>
+                </div>
+              </div>
+              <div class="entry-item">
+                <div class="entry-date">Mon Jun 1</div>
+                <div class="entry-preview">Started the dashboard project seriously. The second brain concept feels right — everything interconnected. Need to plan the agent architecture carefully.</div>
+                <div class="entry-tags">
+                  <span class="tag" style="background:var(--project-dim);color:var(--project)"># projects</span>
+                  <span class="tag" style="background:var(--accent-dim);color:var(--accent)"># planning</span>
+                </div>
+              </div>
+              <div class="entry-item">
+                <div class="entry-date">Sat May 30</div>
+                <div class="entry-preview">5 day gym streak. The accountability system is working. Need to add studying to my daily checklist.</div>
+                <div class="entry-tags">
+                  <span class="tag" style="background:var(--job-dim);color:var(--success)"># health</span>
+                  <span class="tag" style="background:var(--acct-dim);color:var(--acct)"># accountability</span>
+                </div>
+              </div>
+              <div class="entry-item">
+                <div class="entry-date">Thu May 28</div>
+                <div class="entry-preview">Reading about second brain systems — Obsidian-style node graphs are exactly what I want. How to make it genuinely useful and not just aesthetic.</div>
+                <div class="entry-tags">
+                  <span class="tag" style="background:var(--project-dim);color:var(--project)"># research</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: GOALS
+      ══════════════════════════════════ -->
+      <div class="view" id="view-goals">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-value" style="color:var(--job)">6</div><div class="stat-label">active goals</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--success)">2</div><div class="stat-label">on track</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--warn)">3</div><div class="stat-label">needs attention</div></div>
+          <div class="stat-card"><div class="stat-value" style="color:var(--danger)">1</div><div class="stat-label">behind pace</div></div>
+        </div>
+
+        <div class="card">
+          <div class="flex items-center justify-between" style="margin-bottom:4px">
+            <div class="card-title" style="margin-bottom:0">current goals</div>
+            <button class="btn" style="font-size:11px;padding:5px 12px">+ add goal</button>
+          </div>
+          <div class="goal-item">
+            <div class="goal-header"><span class="goal-name">Land a job offer</span><span class="goal-pct" style="color:var(--accent)">35%</span></div>
+            <div class="prog-track"><div class="prog-fill" style="width:35%;background:var(--accent)"></div></div>
+            <div class="goal-meta">4 applications · 2 active interviews · target: Aug 2026</div>
+          </div>
+          <div class="goal-item">
+            <div class="goal-header"><span class="goal-name">Gym — 5x per week</span><span class="goal-pct" style="color:var(--success)">80%</span></div>
+            <div class="prog-track"><div class="prog-fill" style="width:80%;background:var(--success)"></div></div>
+            <div class="goal-meta">5 day streak · 20/25 sessions this month</div>
+          </div>
+          <div class="goal-item">
+            <div class="goal-header"><span class="goal-name">Build the dashboard</span><span class="goal-pct" style="color:var(--warn)">20%</span></div>
+            <div class="prog-track"><div class="prog-fill" style="width:20%;background:var(--warn)"></div></div>
+            <div class="goal-meta">Phase 1 in progress · wireframe complete · target: Jul 2026</div>
+          </div>
+          <div class="goal-item">
+            <div class="goal-header"><span class="goal-name">Study DSA daily</span><span class="goal-pct" style="color:var(--danger)">15%</span></div>
+            <div class="prog-track"><div class="prog-fill" style="width:15%;background:var(--danger)"></div></div>
+            <div class="goal-meta">3 sessions this month · behind pace · needs attention</div>
+          </div>
+          <div class="goal-item">
+            <div class="goal-header"><span class="goal-name">Read 12 books this year</span><span class="goal-pct" style="color:var(--warn)">42%</span></div>
+            <div class="prog-track"><div class="prog-fill" style="width:42%;background:var(--warn)"></div></div>
+            <div class="goal-meta">5 / 12 books · on pace</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: CALENDAR
+      ══════════════════════════════════ -->
+      <div class="view" id="view-calendar">
+        <div class="cal-layout">
+          <div class="card">
+            <div class="card-title">june 2026</div>
+            <div class="cal-grid" style="margin-bottom:8px">
+              <div class="cal-header-day">S</div><div class="cal-header-day">M</div><div class="cal-header-day">T</div>
+              <div class="cal-header-day">W</div><div class="cal-header-day">T</div><div class="cal-header-day">F</div><div class="cal-header-day">S</div>
+            </div>
+            <div class="cal-grid" id="cal-grid"></div>
+          </div>
+
+          <div>
+            <div class="section-label" style="margin-bottom:10px">upcoming</div>
+            <div class="event-list">
+              <div class="event-item" style="border-left-color:var(--danger)">
+                <div class="event-title">Stripe application deadline</div>
+                <div class="event-time">Fri Jun 6 · all day</div>
+                <div class="event-agent" style="color:var(--email)">flagged by email agent</div>
+              </div>
+              <div class="event-item" style="border-left-color:var(--accent)">
+                <div class="event-title">Notion — Interview</div>
+                <div class="event-time">Sat Jun 7 · 2:00 PM</div>
+                <div class="event-agent" style="color:var(--email)">synced by email agent</div>
+              </div>
+              <div class="event-item" style="border-left-color:var(--job)">
+                <div class="event-title">Job agent 3-day report</div>
+                <div class="event-time">Wed Jun 10 · automatic</div>
+                <div class="event-agent" style="color:var(--job)">job agent · email delivery</div>
+              </div>
+              <div class="event-item" style="border-left-color:var(--email)">
+                <div class="event-title">Supabase — Technical screen</div>
+                <div class="event-time">Mon Jun 15 · 11:00 AM</div>
+                <div class="event-agent" style="color:var(--email)">synced by email agent</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: COUNCIL OF 5
+      ══════════════════════════════════ -->
+      <div class="view" id="view-council">
+        <div class="council-layout">
+
+          <!-- Elder cards -->
+          <div class="elder-panel">
+            <div class="elder-card active">
+              <div class="elder-avatar" style="background:rgba(124,111,224,0.15)"><span style="color:var(--accent);font-family:var(--font-mono)">M</span></div>
+              <div class="elder-name">Marcus</div>
+              <div class="elder-archetype">The Stoic</div>
+              <div class="elder-desc">Discipline, reason, and what is within your control. Cuts through emotion to find the actionable truth.</div>
+              <span class="elder-stance" style="background:var(--job-dim);color:var(--job)">agrees</span>
+            </div>
+            <div class="elder-card">
+              <div class="elder-avatar" style="background:rgba(78,203,168,0.15)"><span style="color:var(--job);font-family:var(--font-mono)">L</span></div>
+              <div class="elder-name">Lyra</div>
+              <div class="elder-archetype">The Visionary</div>
+              <div class="elder-desc">Long-game thinker. Sees the 5-year arc you can't. Will always push you toward who you're becoming.</div>
+              <span class="elder-stance" style="background:var(--job-dim);color:var(--job)">agrees</span>
+            </div>
+            <div class="elder-card">
+              <div class="elder-avatar" style="background:rgba(224,91,122,0.15)"><span style="color:var(--danger);font-family:var(--font-mono)">Z</span></div>
+              <div class="elder-name">Zeno</div>
+              <div class="elder-archetype">Devil's Advocate</div>
+              <div class="elder-desc">Challenges every assumption. Finds the flaw, the bias, the thing you don't want to hear. Merciless, but right.</div>
+              <span class="elder-stance" style="background:rgba(224,91,91,0.15);color:var(--danger)">challenges</span>
+            </div>
+            <div class="elder-card">
+              <div class="elder-avatar" style="background:rgba(240,160,80,0.15)"><span style="color:var(--acct);font-family:var(--font-mono)">A</span></div>
+              <div class="elder-name">Aria</div>
+              <div class="elder-archetype">The Empath</div>
+              <div class="elder-desc">Emotional intelligence and human truth. Asks what you actually feel vs what you think you should feel.</div>
+              <span class="elder-stance" style="background:rgba(240,160,80,0.15);color:var(--acct)">neutral</span>
+            </div>
+            <div class="elder-card">
+              <div class="elder-avatar" style="background:rgba(138,136,127,0.15)"><span style="color:var(--text-secondary);font-family:var(--font-mono)">R</span></div>
+              <div class="elder-name">Rex</div>
+              <div class="elder-archetype">The Pragmatist</div>
+              <div class="elder-desc">Cuts the philosophy. What are we actually doing, by when, how? No plan survives contact with him unscathed.</div>
+              <span class="elder-stance" style="background:var(--job-dim);color:var(--job)">agrees</span>
+            </div>
+          </div>
+
+          <!-- Consensus bar -->
+          <div class="consensus-bar">
+            <div class="consensus-header">
+              <span class="consensus-label">council consensus</span>
+              <span class="consensus-value">mostly aligned · Zeno dissenting</span>
+            </div>
+            <div class="consensus-track">
+              <div class="consensus-fill" style="width:72%"></div>
+            </div>
+            <div class="consensus-markers">
+              <span class="consensus-marker">divided</span>
+              <span class="consensus-marker">split</span>
+              <span class="consensus-marker">aligned</span>
+              <span class="consensus-marker">consensus</span>
+            </div>
+          </div>
+
+          <!-- Ask the council -->
+          <div class="council-input-area">
+            <textarea class="council-ask" placeholder="Ask the council for perspective — a decision, a situation, a question you're wrestling with..."></textarea>
+            <div class="council-input-footer">
+              <span class="text-xs text-mono text-dim">all 5 elders respond simultaneously · they may debate each other</span>
+              <button class="btn btn-primary">Consult the council</button>
+            </div>
+          </div>
+
+          <!-- Responses -->
+          <div class="council-responses">
+            <div class="council-response">
+              <div class="response-header">
+                <div class="response-avatar" style="background:rgba(124,111,224,0.15);color:var(--accent)">M</div>
+                <span class="response-name">Marcus</span>
+                <span class="response-arch">· The Stoic</span>
+                <span class="badge" style="margin-left:auto;background:var(--job-dim);color:var(--job)">agrees</span>
+              </div>
+              <div class="response-text">You cannot control the recruiter's decision, only the quality of your preparation. The interview is simply a test of whether you've done the work. Have you? If yes, proceed without anxiety. If no, you already know what to do tonight. Emotions are data, not instructions.</div>
+            </div>
+
+            <div class="council-response">
+              <div class="response-header">
+                <div class="response-avatar" style="background:rgba(78,203,168,0.15);color:var(--job)">L</div>
+                <span class="response-name">Lyra</span>
+                <span class="response-arch">· The Visionary</span>
+                <span class="badge" style="margin-left:auto;background:var(--job-dim);color:var(--job)">agrees</span>
+              </div>
+              <div class="response-text">This interview is not about the job — it is a milestone in who you are becoming. Every preparation session rewires you. The version of you that gets the offer is built right now, in the quiet hours. See beyond the outcome and focus on the growth vector.</div>
+              <div class="response-challenge"><span style="color:var(--accent)">→ challenges Marcus:</span> Preparation without vision is just anxiety with extra steps. What do you actually want from this role?</div>
+            </div>
+
+            <div class="council-response" style="border-color:rgba(224,91,91,0.3)">
+              <div class="response-header">
+                <div class="response-avatar" style="background:rgba(224,91,122,0.15);color:var(--danger)">Z</div>
+                <span class="response-name">Zeno</span>
+                <span class="response-arch">· Devil's Advocate</span>
+                <span class="badge" style="margin-left:auto;background:rgba(224,91,91,0.15);color:var(--danger)">challenges</span>
+              </div>
+              <div class="response-text">Have you actually asked yourself whether this role fits what you wrote in your journal three weeks ago? Or are you chasing it because it appeared? "Stretch" roles feel validating to pursue. That's not the same as them being right for you right now.</div>
+              <div class="response-challenge"><span style="color:var(--danger)">→ challenges Lyra:</span> "Growth vector" is meaningless without a direction. Growth toward what, exactly?</div>
+            </div>
+
+            <div class="council-response">
+              <div class="response-header">
+                <div class="response-avatar" style="background:rgba(240,160,80,0.15);color:var(--acct)">A</div>
+                <span class="response-name">Aria</span>
+                <span class="response-arch">· The Empath</span>
+                <span class="badge" style="margin-left:auto;background:rgba(240,160,80,0.15);color:var(--acct)">neutral</span>
+              </div>
+              <div class="response-text">How are you actually feeling going into this? Not how you think you should feel — what's the honest internal experience? I notice you've been journaling less this week. That usually means something. The preparation matters, but so does the state you're in when you walk in.</div>
+            </div>
+
+            <div class="council-response">
+              <div class="response-header">
+                <div class="response-avatar" style="background:rgba(138,136,127,0.15);color:var(--text-secondary)">R</div>
+                <span class="response-name">Rex</span>
+                <span class="response-arch">· The Pragmatist</span>
+                <span class="badge" style="margin-left:auto;background:var(--job-dim);color:var(--job)">agrees</span>
+              </div>
+              <div class="response-text">The philosophy is interesting but let's be concrete. You have 11 days until the Supabase screen. That's 11 hours of system design prep minimum. Tonight: 1 hour LeetCode, 30 min system design reading. That's it. Stop deliberating and execute the plan.</div>
+              <div class="response-challenge"><span style="color:var(--text-secondary)">→ challenges Aria:</span> The feelings audit can happen after the prep is done. Sequence matters.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: ACCOUNTABILITY
+      ══════════════════════════════════ -->
+      <div class="view" id="view-accountability">
+        <div class="streak-row">
+          <div class="streak-card"><div class="streak-num" style="color:var(--success)">5</div><div class="streak-label">gym streak</div><div class="streak-status" style="color:var(--success)">active</div></div>
+          <div class="streak-card"><div class="streak-num" style="color:var(--email)">12</div><div class="streak-label">days logged</div><div class="streak-status" style="color:var(--text-dim)">this month</div></div>
+          <div class="streak-card"><div class="streak-num" style="color:var(--danger)">3</div><div class="streak-label">DSA sessions</div><div class="streak-status" style="color:var(--danger)">behind pace</div></div>
+          <div class="streak-card"><div class="streak-num" style="color:var(--job)">4</div><div class="streak-label">apps sent</div><div class="streak-status" style="color:var(--text-dim)">this week</div></div>
+        </div>
+
+        <div class="acct-layout">
+          <div class="card">
+            <div class="card-title">today's checklist</div>
+            <div class="checkin-item">
+              <div class="check-box done"></div>
+              <div class="checkin-label done">Morning gym session</div>
+              <div class="checkin-time">7:30 AM</div>
+            </div>
+            <div class="checkin-item">
+              <div class="check-box done"></div>
+              <div class="checkin-label done">Review job listings</div>
+              <div class="checkin-time">10:00 AM</div>
+            </div>
+            <div class="checkin-item">
+              <div class="check-box" onclick="toggleCheck(this)"></div>
+              <div class="checkin-label">1hr DSA practice (Leetcode)</div>
+              <div class="checkin-time">due 6pm</div>
+            </div>
+            <div class="checkin-item">
+              <div class="check-box" onclick="toggleCheck(this)"></div>
+              <div class="checkin-label">Work on dashboard — Phase 1</div>
+              <div class="checkin-time">due 9pm</div>
+            </div>
+            <div class="checkin-item">
+              <div class="check-box" onclick="toggleCheck(this)"></div>
+              <div class="checkin-label">Evening journal entry</div>
+              <div class="checkin-time">due 10pm</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">goal progress</div>
+            <div class="goal-item">
+              <div class="goal-header"><span class="goal-name" style="font-size:12px">Land a job offer</span><span class="goal-pct" style="color:var(--accent);font-size:12px">35%</span></div>
+              <div class="prog-track"><div class="prog-fill" style="width:35%;background:var(--accent)"></div></div>
+            </div>
+            <div class="goal-item">
+              <div class="goal-header"><span class="goal-name" style="font-size:12px">Gym 5x/week</span><span class="goal-pct" style="color:var(--success);font-size:12px">80%</span></div>
+              <div class="prog-track"><div class="prog-fill" style="width:80%;background:var(--success)"></div></div>
+            </div>
+            <div class="goal-item" style="border-bottom:none">
+              <div class="goal-header"><span class="goal-name" style="font-size:12px">Study DSA daily</span><span class="goal-pct" style="color:var(--danger);font-size:12px">15%</span></div>
+              <div class="prog-track"><div class="prog-fill" style="width:15%;background:var(--danger)"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">agent check-in preview · 8:00 PM</div>
+          <div class="agent-msg">
+            <div class="agent-msg-from">accountability agent · scheduled 8:00 PM</div>
+            <div class="agent-msg-text">Hey — checking in. You've hit the gym 5 days straight, that's real consistency. DSA is still the gap: 3 sessions vs the 15-session pace you set yourself. The Supabase screen is in 11 days. Rex was right in the council today — what's the plan for tonight? I'll check back at 10pm.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ══════════════════════════════════
+           VIEW: PROJECTS
+      ══════════════════════════════════ -->
+      <div class="view" id="view-projects">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="project-card">
+            <div class="project-header">
+              <div class="project-icon">
+                <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2"/></svg>
+              </div>
+              <div>
+                <div class="project-name">job-agent</div>
+                <div class="project-desc">AI job matching · Node.js · Claude API</div>
+                <div class="project-meta">
+                  <span class="badge" style="background:var(--job-dim);color:var(--job)">active</span>
+                  <span class="text-xs text-mono text-dim">last commit 1d ago</span>
+                </div>
+              </div>
+            </div>
+            <div class="divider" style="margin-bottom:10px"></div>
+            <div class="card-title">recent changes · by archivist</div>
+            <div class="change-log">
+              <div class="change-entry">
+                <div class="change-time">Jun 3, 2:14 PM</div>
+                <div><div class="change-text">Refactored scoring pipeline — batching now handles 200 jobs in 2 calls</div><div class="change-ai-note">Impact: ~40% cost reduction per run. Core logic in scoreJobs.js rewritten.</div></div>
+              </div>
+              <div class="change-entry">
+                <div class="change-time">Jun 1, 11:30 AM</div>
+                <div><div class="change-text">Added prompt caching for resume context</div><div class="change-ai-note">Resume now sent once per run, cached across all scoring batches.</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="project-card">
+            <div class="project-header">
+              <div class="project-icon">
+                <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+              </div>
+              <div>
+                <div class="project-name">nexus-dashboard</div>
+                <div class="project-desc">Personal AI OS · React + Node · SQLite</div>
+                <div class="project-meta">
+                  <span class="badge" style="background:var(--warn);background:rgba(240,160,80,0.15);color:var(--warn)">phase 1</span>
+                  <span class="text-xs text-mono text-dim">just started</span>
+                </div>
+              </div>
+            </div>
+            <div class="divider" style="margin-bottom:10px"></div>
+            <div class="card-title">recent changes · by archivist</div>
+            <div class="change-log">
+              <div class="change-entry">
+                <div class="change-time">Jun 4, today</div>
+                <div><div class="change-text">master.html created — full design system + all views wired</div><div class="change-ai-note">Foundation file. All views, components, color tokens, and typography defined.</div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+    </div><!-- /content -->
+  </div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ============================================================
+//  NAVIGATION
+// ============================================================
+
+const viewMeta = {
+  'home':           ['Morning digest',  '· good morning'],
+  'jobs':           ['Job board',        '· 47 listings this run'],
+  'graph':          ['Second brain',     '· knowledge graph'],
+  'journal':        ['Journal',          '· 24 entries'],
+  'goals':          ['Goals',            '· 6 active'],
+  'calendar':       ['Calendar',         '· june 2026'],
+  'council':        ['Council of 5',     '· ask for perspective'],
+  'accountability': ['Accountability',   '· daily check-in'],
+  'projects':       ['Projects',         '· archivist active'],
+};
+
+function showView(id, btn) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn[data-view]').forEach(b => b.classList.remove('active'));
+
+  const view = document.getElementById('view-' + id);
+  if (view) view.classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  const meta = viewMeta[id] || [id, ''];
+  document.getElementById('topbar-title').textContent = meta[0];
+  document.getElementById('topbar-sub').textContent   = meta[1];
+
+  if (id === 'graph') initGraph();
+  if (id === 'calendar') buildCal();
+}
+
+// ============================================================
+//  LIVE CLOCK
+// ============================================================
+
+function updateClock() {
+  const now  = new Date();
+  const hh   = String(now.getHours()).padStart(2,'0');
+  const mm   = String(now.getMinutes()).padStart(2,'0');
+  const time = hh + ':' + mm;
+  document.getElementById('live-time').textContent   = time;
+  document.getElementById('greeting-time').textContent = time;
+}
+updateClock();
+setInterval(updateClock, 10000);
+
+// ============================================================
+//  CHECKLIST TOGGLE
+// ============================================================
+
+function toggleCheck(box) {
+  const isChecked = box.classList.toggle('done');
+  const label = box.nextElementSibling;
+  if (label) label.classList.toggle('done', isChecked);
+}
+
+// ============================================================
+//  CALENDAR BUILD
+// ============================================================
+
+function buildCal() {
+  const grid = document.getElementById('cal-grid');
+  if (!grid || grid.children.length > 0) return;
+
+  const events = { 4: 'today', 6: [['danger']], 7: [['accent']], 10: [['job']], 15: [['email']] };
+  const blanks = 0; // June 1 = Monday = index 1
+
+  for (let i = 0; i < 1; i++) {
+    const el = document.createElement('div');
+    grid.appendChild(el);
+  }
+
+  for (let d = 1; d <= 30; d++) {
+    const el = document.createElement('div');
+    el.className = 'cal-cell';
+    if (d === 4) el.classList.add('today');
+    else if (events[d]) el.classList.add('has-event');
+    el.textContent = d;
+
+    if (events[d] && d !== 4 && Array.isArray(events[d])) {
+      const dots = document.createElement('div');
+      dots.className = 'event-dots';
+      events[d].forEach(([color]) => {
+        const dot = document.createElement('div');
+        dot.className = 'event-dot';
+        dot.style.background = `var(--${color})`;
+        dots.appendChild(dot);
+      });
+      el.appendChild(dots);
+    }
+    grid.appendChild(el);
+  }
+}
+
+// ============================================================
+//  GRAPH — D3-STYLE CANVAS SIMULATION
+// ============================================================
+
+let graphNodes = [], graphEdges = [], graphScale = 1, graphOffX = 0, graphOffY = 0;
+let animFrame;
+
+function initGraph() {
+  const canvas = document.getElementById('graph-canvas');
+  if (!canvas) return;
+  const container = canvas.parentElement;
+  canvas.width  = container.offsetWidth;
+  canvas.height = container.offsetHeight;
+
+  const W = canvas.width, H = canvas.height;
+
+  const labels = [
+    'Jun 3 — Supabase screen',
+    'Jun 1 — Dashboard plan',
+    'May 30 — Gym streak',
+    'May 28 — Second brain research',
+    'May 25 — Career reflection',
+    'May 22 — DSA study plan',
+    'May 20 — Job search strategy',
+    'May 18 — Morning routine',
+    'May 15 — Reading notes',
+    'May 12 — Project ideas',
+    'career', 'projects', 'health', 'learning', 'planning',
+    'accountability', 'reflection', 'research', 'goals', 'systems',
+  ];
+
+  const colors = [
+    'var(--council)','var(--council)','var(--council)','var(--council)','var(--council)',
+    'var(--council)','var(--council)','var(--council)','var(--council)','var(--council)',
+    'var(--job)','var(--project)','var(--success)','var(--email)','var(--accent)',
+    'var(--acct)','var(--accent)','var(--email)','var(--success)','var(--project)',
+  ];
+
+  // Random stable positions seeded
+  function sr(s) { let x = Math.sin(s * 9301 + 49297) * 233280; return x - Math.floor(x); }
+
+  graphNodes = labels.map((lbl, i) => ({
+    id: i, label: lbl,
+    x: 60 + sr(i * 3 + 1) * (W - 120),
+    y: 60 + sr(i * 3 + 2) * (H - 120),
+    vx: 0, vy: 0,
+    r: i < 10 ? 5 + sr(i) * 4 : 8,
+    color: colors[i],
+    isTag: i >= 10,
+  }));
+
+  graphEdges = [];
+  const tagMap = {
+    0: [10,11], 1: [11,14], 2: [12,15], 3: [17,11],
+    4: [10,16], 5: [13,15], 6: [10,14], 7: [15,12],
+    8: [17,13], 9: [11,14],
+  };
+  Object.entries(tagMap).forEach(([src, targets]) => {
+    targets.forEach(t => graphEdges.push({ a: +src, b: t }));
+  });
+
+  // Tag clusters
+  for (let i = 10; i < 20; i++) {
+    for (let j = i+1; j < 20; j++) {
+      if (sr(i * j) > 0.7) graphEdges.push({ a: i, b: j });
+    }
+  }
+
+  if (animFrame) cancelAnimationFrame(animFrame);
+  tickGraph(canvas);
+}
+
+function tickGraph(canvas) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+
+  // Simple force sim step
+  for (let iter = 0; iter < 3; iter++) {
+    graphNodes.forEach(n => {
+      graphNodes.forEach(m => {
+        if (n.id === m.id) return;
+        const dx = n.x - m.x, dy = n.y - m.y;
+        const d  = Math.sqrt(dx*dx + dy*dy) || 1;
+        const f  = 1200 / (d * d);
+        n.vx += f * dx / d;
+        n.vy += f * dy / d;
+      });
+    });
+    graphEdges.forEach(e => {
+      const a = graphNodes[e.a], b = graphNodes[e.b];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const d  = Math.sqrt(dx*dx + dy*dy) || 1;
+      const f  = (d - 100) * 0.03;
+      a.vx += f * dx / d; a.vy += f * dy / d;
+      b.vx -= f * dx / d; b.vy -= f * dy / d;
+    });
+    graphNodes.forEach(n => {
+      n.vx *= 0.85; n.vy *= 0.85;
+      n.x  = Math.max(20, Math.min(W - 20, n.x + n.vx));
+      n.y  = Math.max(20, Math.min(H - 20, n.y + n.vy));
+    });
+  }
+
+  // Draw
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-surface').trim() || '#0f0f11';
+  ctx.fillRect(0, 0, W, H);
+
+  // Edges
+  graphEdges.forEach(e => {
+    const a = graphNodes[e.a], b = graphNodes[e.b];
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 0.8;
+    ctx.stroke();
+  });
+
+  // Nodes
+  graphNodes.forEach(n => {
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    ctx.fillStyle = n.isTag ? 'rgba(255,255,255,0.25)' : n.color;
+    ctx.fill();
+
+    if (n.isTag) {
+      ctx.font = '9px JetBrains Mono, monospace';
+      ctx.fillStyle = 'rgba(255,255,255,0.35)';
+      ctx.textAlign = 'center';
+      ctx.fillText(n.label, n.x, n.y - n.r - 4);
+    }
+  });
+
+  animFrame = requestAnimationFrame(() => tickGraph(canvas));
+}
+
+function graphZoom(factor) {
+  graphScale *= factor;
+  graphNodes.forEach(n => {
+    const cx = document.getElementById('graph-canvas').width / 2;
+    const cy = document.getElementById('graph-canvas').height / 2;
+    n.x = cx + (n.x - cx) * factor;
+    n.y = cy + (n.y - cy) * factor;
+  });
+}
+
+function resetGraph() {
+  graphNodes.forEach(n => { n.vx = (Math.random()-0.5)*5; n.vy = (Math.random()-0.5)*5; });
+}
+
+// Click on graph
+document.addEventListener('click', e => {
+  const canvas = document.getElementById('graph-canvas');
+  if (!canvas || e.target !== canvas) return;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  const hit = graphNodes.find(n => Math.hypot(n.x - mx, n.y - my) < n.r + 6);
+  const preview = document.getElementById('graph-preview');
+  if (hit && preview) {
+    preview.textContent = hit.isTag ? `tag: #${hit.label}` : `entry: ${hit.label}`;
+    preview.style.color = 'var(--text-secondary)';
+  }
+});
+</script>
+</body>
+</html>
