@@ -8,10 +8,20 @@ import cron from 'node-cron';
 import jobsRouter from './routes/jobs.js';
 import notesRouter from './routes/notes.js';
 import councilRouter from './routes/council.js';
+import accountabilityRouter from './routes/accountability.js';
+import projectsRouter from './routes/projects.js';
+import briefRouter from './routes/brief.js';
+import emailRouter from './routes/email.js';
+import calendarRouter from './routes/calendar.js';
+import overviewRouter from './routes/overview.js';
 import { DB_PATH } from './db/index.js';
 import { runJobAgent } from './agents/jobAgent.js';
+import { runAccountability } from './agents/accountabilityAgent.js';
+import { runArchivist, startWatchers } from './agents/archivistAgent.js';
+import { runMorningBrief } from './agents/morningBriefAgent.js';
+import { runEmailAgent } from './agents/emailAgent.js';
 import { purgeStaleJobs } from './db/maintenance.js';
-import { JOB_AGENT_CRON } from './config.js';
+import { JOB_AGENT_CRON, ACCOUNTABILITY_CRON, ARCHIVIST_CRON, BRIEF_CRON, EMAIL_CRON } from './config.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -23,6 +33,12 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, db: DB_PATH }));
 app.use('/api/jobs', jobsRouter);
 app.use('/api/notes', notesRouter);
 app.use('/api/council', councilRouter);
+app.use('/api/accountability', accountabilityRouter);
+app.use('/api/projects', projectsRouter);
+app.use('/api/brief', briefRouter);
+app.use('/api/email', emailRouter);
+app.use('/api/calendar', calendarRouter);
+app.use('/api/overview', overviewRouter);
 
 app.listen(PORT, () => {
   console.log(`Nexus server on http://localhost:${PORT}  (db: ${DB_PATH})`);
@@ -40,4 +56,49 @@ app.listen(PORT, () => {
     }
   });
   console.log(`Job agent cron registered: "${JOB_AGENT_CRON}" (07:00 every 3rd day)`);
+
+  // Accountability: nightly streak refresh + check-in nudge. Pure local
+  // (no external key needed); the nudge degrades to a template without one.
+  cron.schedule(ACCOUNTABILITY_CRON, async () => {
+    try {
+      await runAccountability({ trigger: 'cron' });
+    } catch (e) {
+      console.error(`[cron] accountability run failed: ${e.message}`);
+    }
+  });
+  console.log(`Accountability cron registered: "${ACCOUNTABILITY_CRON}" (20:00 daily)`);
+
+  // Project archivist: poll git history every 30 min, and watch each repo's
+  // .git/logs/HEAD for prompt scans. Sandboxed to WATCHED_PROJECTS paths.
+  cron.schedule(ARCHIVIST_CRON, async () => {
+    try {
+      await runArchivist({ trigger: 'cron' });
+    } catch (e) {
+      console.error(`[cron] archivist run failed: ${e.message}`);
+    }
+  });
+  startWatchers();
+  console.log(`Archivist cron registered: "${ARCHIVIST_CRON}" (every 30 min)`);
+
+  // Morning brief: curate a personal news digest at dawn. Degrades to an empty
+  // brief (with an explanatory note) when NEWS_API_KEY isn't set.
+  cron.schedule(BRIEF_CRON, async () => {
+    try {
+      await runMorningBrief({ trigger: 'cron' });
+    } catch (e) {
+      console.error(`[cron] morning brief run failed: ${e.message}`);
+    }
+  });
+  console.log(`Morning brief cron registered: "${BRIEF_CRON}" (06:00 daily)`);
+
+  // Email agent: daily read-only Gmail triage. No-ops with a clear log line
+  // until `npm run gmail:auth` has been run (credentials + token present).
+  cron.schedule(EMAIL_CRON, async () => {
+    try {
+      await runEmailAgent({ trigger: 'cron' });
+    } catch (e) {
+      console.error(`[cron] email agent run failed: ${e.message}`);
+    }
+  });
+  console.log(`Email agent cron registered: "${EMAIL_CRON}" (08:00 daily)`);
 });

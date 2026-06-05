@@ -88,3 +88,42 @@ export const EXCLUDED_KEYWORDS = [
 
 // node-cron schedule: 07:00 every 3rd day. Registered on server boot.
 export const JOB_AGENT_CRON = '0 7 */3 * *';
+
+// Accountability check-in: 20:00 daily. Refreshes streaks + builds the nudge.
+export const ACCOUNTABILITY_CRON = '0 20 * * *';
+
+// ── PROJECT ARCHIVIST ────────────────────────────────────────────────────────
+// Absolute local folder paths the archivist watches. These are the ONLY
+// directories the agent ever touches — filesystem reach is sandboxed to this
+// list (it's why Nexus stays local-only). Each entry: { name, path, type }.
+// Defaults to the Nexus repo itself (parent of server/) so the feature works
+// out of the box; edit/extend with your own repos. Set NEXUS_REPO_ROOT to
+// override the default path.
+const repoRoot = join(__dirname, '..');
+export const WATCHED_PROJECTS = [
+  { name: 'nexus', path: process.env.NEXUS_REPO_ROOT || repoRoot, type: 'app' },
+  // { name: 'my-other-project', path: '/Users/you/code/other', type: 'library' },
+];
+
+// Archivist git-log poll: every 30 minutes. A chokidar watch on each repo's
+// .git/logs/HEAD also triggers a debounced scan so commits land promptly.
+export const ARCHIVIST_CRON = '*/30 * * * *';
+
+// ── MORNING BRIEF ────────────────────────────────────────────────────────────
+// Curated daily digest. Interests are learned from notes/tags + goals; news is
+// fetched from NewsAPI (NEWS_API_KEY in .env, free dev tier at newsapi.org) and
+// condensed with Claude. Degrades gracefully with no key (empty digest + note).
+export const BRIEF_CRON = '0 6 * * *';      // 06:00 daily
+export const BRIEF_ARTICLE_COUNT = 6;        // headlines to curate per morning
+export const BRIEF_LOOKBACK_DAYS = 2;        // how fresh the news must be
+
+// ── EMAIL AGENT (Gmail, read-only) ───────────────────────────────────────────
+// Reads Gmail via OAuth with the gmail.readonly scope ONLY — Nexus never sends
+// or deletes mail. credentials.json (OAuth Desktop creds from Google Cloud)
+// and the cached token live in server/ and are gitignored. Run the one-time
+// `npm run gmail:auth` to authorize; the agent degrades gracefully until then.
+export const GMAIL_SCOPES = ['https://www.googleapis.com/auth/gmail.readonly'];
+export const GMAIL_CREDENTIALS_PATH = join(__dirname, 'credentials.json');
+export const GMAIL_TOKEN_PATH = join(__dirname, 'gmail-token.json');
+export const EMAIL_CRON = '0 8 * * *';       // 08:00 daily inbox scan
+export const EMAIL_SCAN_COUNT = 20;          // most recent messages to classify per run
