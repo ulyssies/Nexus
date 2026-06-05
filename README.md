@@ -6,14 +6,14 @@ The shared context **is** the product. Most "AI assistants" are six disconnected
 
 ### What it does for you
 
-- 🧭 **Command center** — one home dashboard with live stats, every agent's status, and a merged activity feed across all of them.
-- 💼 **Finds & scores jobs** — pulls live listings and ranks them against your résumé with Claude.
-- 📨 **Triages your inbox** (read-only) — flags what's urgent, pulls deadlines onto your calendar, and updates job statuses when a recruiter writes back.
-- 🧠 **Second brain** — journal entries and notes are auto-tagged and linked into a force-graph; shared tags become edges.
-- 🏛️ **Council of 5** — five AI personas debate your decisions and rants, challenge each other, and land on a consensus.
-- 🎯 **Keeps you accountable** — tracks goals, maintains streaks, and sends a nightly streak-aware nudge.
-- 📰 **Morning brief** — learns your interests from your own notes and curates a short daily news read.
-- 📚 **Project archivist** — watches your repos and turns commits into plain-English memory + graph nodes.
+- Command center** — one home dashboard with live stats, every agent's status, and a merged activity feed across all of them.
+- Finds & scores jobs** — pulls live listings and ranks them against your résumé with Claude.
+- Triages your inbox** (read-only) — flags what's urgent, pulls deadlines onto your calendar, and updates job statuses when a recruiter writes back.
+- Second brain** — journal entries and notes are auto-tagged and linked into a force-graph; shared tags become edges.
+- Council of 5** — five AI personas debate your decisions and rants, challenge each other, and land on a consensus.
+- Keeps you accountable** — tracks goals, maintains streaks, and sends a nightly streak-aware nudge.
+- Morning brief** — learns your interests from your own notes and curates a short daily news read.
+- Project archivist** — watches your repos and turns commits into plain-English memory + graph nodes.
 
 **Local-only by design.** Nexus runs on `localhost`, is never exposed publicly, and ships as a repo you clone and point at your own API keys. Filesystem and inbox access are exactly why it stays on your machine.
 
