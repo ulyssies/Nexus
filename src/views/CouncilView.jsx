@@ -1,6 +1,18 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 
+// Mono-letter avatars (the original master.html style). The generated face
+// tiles in src/assets/elders + src/elderFaces.js are kept for a possible later
+// revival, but felt out of place, so the council uses initials for now.
+const AVATAR = {
+  Marcus: { background: 'rgba(124,111,224,0.15)', color: 'var(--accent)' },
+  Lyra: { background: 'rgba(78,203,168,0.15)', color: 'var(--job)' },
+  Zeno: { background: 'rgba(224,91,122,0.15)', color: 'var(--danger)' },
+  Aria: { background: 'rgba(240,160,80,0.15)', color: 'var(--acct)' },
+  Rex: { background: 'rgba(138,136,127,0.15)', color: 'var(--text-secondary)' },
+};
+const avatarOf = (name) => AVATAR[name] || { background: 'var(--bg-raised)', color: 'var(--text-secondary)' };
+
 // Short archetype descriptions (UI copy from the design, keyed by elder).
 const DESC = {
   Marcus: 'Discipline, reason, and what is within your control. Cuts through emotion to the actionable truth.',
@@ -67,8 +79,15 @@ export default function CouncilView() {
             const stance = stanceOf(e.name);
             return (
               <div className={`elder-card${stance ? ' active' : ''}`} key={e.name}>
-                <div className="elder-avatar" style={{ background: 'var(--bg-raised)' }}>
-                  <span style={{ color: e.color, fontFamily: 'var(--font-mono)' }}>{e.name[0]}</span>
+                <div
+                  className="elder-avatar"
+                  title={e.name}
+                  style={{
+                    ...avatarOf(e.name),
+                    boxShadow: stance ? `0 0 0 2px ${STANCE_STYLE[stance].color}` : 'none',
+                  }}
+                >
+                  <span style={{ fontFamily: 'var(--font-mono)', color: avatarOf(e.name).color }}>{e.name[0]}</span>
                 </div>
                 <div className="elder-name">{e.name}</div>
                 <div className="elder-archetype">{e.role}</div>
@@ -129,7 +148,7 @@ export default function CouncilView() {
               <div className="council-response" key={e.name}
                 style={r.stance === 'challenges' ? { borderColor: 'rgba(224,91,91,0.3)' } : undefined}>
                 <div className="response-header">
-                  <div className="response-avatar" style={{ background: 'var(--bg-raised)', color: e.color }}>{e.name[0]}</div>
+                  <div className="response-avatar" title={e.name} style={avatarOf(e.name)}>{e.name[0]}</div>
                   <span className="response-name">{e.name}</span>
                   <span className="response-arch">· {e.role}</span>
                   <span className="badge" style={{ marginLeft: 'auto', ...STANCE_STYLE[r.stance] }}>{r.stance}</span>
