@@ -19,25 +19,67 @@ The shared context **is** the product. Most "AI assistants" are six disconnected
 
 **Status:** Phases 1–6 complete — all six agents are built and running on schedule. Two need your own credentials to go fully live (Gmail OAuth for the email agent; a NewsAPI key for the brief); both degrade gracefully until then. See [Roadmap](#roadmap).
 
-## Screens
+## The dashboard, screen by screen
 
-**Home / command center** — the morning digest: live stat cards, every agent's status at a glance (click through to any tab), a merged cross-agent activity feed, your curated morning brief, and a goals snapshot. This is the one screen that shows the whole system working together.
+Nexus is one SPA with a left rail of tabs. Each tab is a window onto one or more agents writing to the shared `nexus.db` — so what you see in one screen is often the product of another agent's work. Here is every screen and what's running behind it.
 
-**Job board** — live listings scored against your résumé, sorted by match, with a manual "run now" trigger.
+### 🏠 Home — the command center
+
+The morning digest and the one screen that shows the whole system working together. It reads from a single `/api/overview` endpoint that aggregates across **every** agent's table in one shot:
+
+- **Live stat cards** — strong job matches, urgent emails, your best active streak, upcoming deadlines. Each card clicks straight through to its tab.
+- **AGENTS panel** — all six agents with a real-time status line (`2016 listings tracked`, `20 triaged · 1 urgent`, `watching 1 repo · 7 changes`) and a health dot (active / idle / needs-attention). Click any row to jump to that agent's view.
+- **AGENT FEED** — a merged, reverse-chronological stream of what every agent has been doing: a brief curated, an email flagged, the council weighing in, the archivist recording commits. This is the cross-agent picture nothing else gives you.
+- **Morning brief** read + **goals snapshot** with streak bars.
+
+### 💼 Job board — the job agent
+
+Live listings fetched from Adzuna / The Muse / Jobicy, scored 0–100 against your `.tex` résumés by Claude, and rendered from SQLite sorted by match. Filters for track (DA/SWE), entry-level fit, and application status. The **`↻ run now`** button triggers the whole fetch→score→save pipeline on demand (and it also runs on a 3-day cron). Each listing carries its match reasons and missing skills. **Cross-agent:** the email agent writes back here — when a recruiter emails, a row's status flips to `interviewing` without you touching it.
 
 ![Job board](docs/screenshots/job-board.png)
 
-**Journal** — free-form entries; an AI agent tags each one on save.
+### 🧠 Second brain — the knowledge graph
 
-![Journal](docs/screenshots/journal.png)
-
-**Second brain** — every note is a node; a shared tag is an edge. Click a node to preview it.
+Every note (journal entry, free note, or an archivist's commit summary) is a **node**; any two notes that share a tag get an **edge**. The result is a force-directed graph (`react-force-graph-2d`) you can pan, zoom, and click to preview a node. Untagged notes show dim; well-connected themes cluster. This is the "nervous system" the council and morning brief read from. The edges are produced entirely by the **tagging agent** (below).
 
 ![Second-brain graph](docs/screenshots/graph.png)
 
-**Council of 5** — five personas answer in parallel, challenge each other, and land on a consensus score (persona prompts are starter text you refine in your own voice).
+### 📓 Journal — free writing, auto-organized
+
+Write a free-form entry and hit **Save + auto-tag**. On save the **tagging agent** reads the text and returns 2–4 topic tags, which immediately appear on the entry and wire it into the second-brain graph. Recent entries are listed alongside the editor. You're never asked to file or categorize anything — the structure forms itself.
+
+![Journal](docs/screenshots/journal.png)
+
+### 🎯 Goals — what you're working toward
+
+Create goals with a cadence (daily / weekly) and an optional target/category. Each goal shows a **streak momentum bar** (current streak relative to your best). Goals are read by two other agents: the **accountability agent** (for nudges and streak tracking) and the **morning brief** (your goal categories become news interests). Add a goal here and the Accountability tab and Home snapshot light up.
+
+### 📅 Calendar — email triage + deadlines (the email agent)
+
+The read-only **email agent** scans your Gmail inbox on a daily cron (and on demand via **scan inbox**), and this screen surfaces its work two ways:
+
+- **Upcoming** — calendar events, including deadlines the agent *extracted from your emails* ("Application due Friday" → an event traced back to the source message), color-coded by who created them (you / email / job agent).
+- **Inbox · triaged** — every scanned email tagged with an importance badge (`urgent` / `important` / `normal` / `noise`) and a category, plus a badge when the agent took a cross-agent action (e.g. `job → interviewing`).
+
+Importance, deadlines, and job-status inference are all classified by Claude in a single batched call per run. Scope stays `gmail.readonly` — Nexus **never** sends or deletes.
+
+### 🏛️ Council of 5 — perspective on demand
+
+Ask a decision, a situation, or just rant. Five personas — **Marcus** (the Stoic / control), **Lyra** (the Visionary / long arc), **Zeno** (Devil's Advocate / blind spots), **Aria** (the Empath / emotional truth), and **Rex** (the Pragmatist / next step) — answer in parallel, then each sees the others and responds again, declaring a stance (agrees / neutral / challenges). A cheap Haiku call scores overall consensus 0–100, shown on a meter. The council reads your recent journal + active goals as cached context, so its advice is grounded in your actual life. Each session persists and replays on revisit.
 
 ![Council of 5](docs/screenshots/council.png)
+
+### 📊 Accountability — streaks & nudges (the accountability agent)
+
+Streak cards for your top goals, a today's check-in list (mark each goal `done` / `partial` / `missed`), and compact progress bars. Streaks are a cache **rebuilt from your check-in history** — a missed day or a gap correctly resets the live count. Nightly at 8pm (and via **run now**) the agent refreshes every streak and writes one warm, streak-aware nudge with Claude ("you're 11 days into the gym — don't break it tonight"), grounded in your goals and recent journal.
+
+### 📚 Projects — the archivist
+
+Per-repo cards with an AI-written change log. The **project archivist** polls `git log` every 30 minutes (and watches each repo's `.git/logs/HEAD` for instant scans), summarizes each new commit with Claude into a `{summary, why, impact}` record, and — crucially — turns every change into a **tagged node in the second-brain graph**, so your project history connects to your journal themes by shared tags. Filesystem reach is sandboxed to the paths in `WATCHED_PROJECTS`; it touches nothing else.
+
+### 🏷️ Behind the scenes — the tagging agent
+
+Not a tab, but the connective tissue of the whole system. The **tagging agent** (`agents/tagAgent.js`) runs whenever a note is created — a journal entry on save, or an archivist commit summary. It's given the note text *and the list of tags already in your second brain*, and told to **reuse an existing tag whenever one fits** before inventing a new one. That reuse is what keeps the graph connected instead of fragmenting into one-off tags, and it's why a commit about "the council feature" can end up edge-connected to a journal entry about your career. It degrades gracefully with no API key (the note still saves, just untagged).
 
 ---
 
@@ -193,15 +235,56 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full file-by-file tree and architecture n
 
 ## Roadmap
 
+> **This is the worst version of Nexus it will ever be.** Phases 1–7 got the skeleton standing and every agent talking to the same brain. Everything from here is making it sharper, deeper, and more genuinely useful — and there's a *lot* of it. The plan below is a living document; expect it to grow.
+
+### Shipped (Phases 1–7)
+
 1. **Scaffold + DB** ✅ — frontend, server, SQLite schema, design ported.
 2. **Job agent** ✅ — pipeline absorbed, cron wired, run button, board live.
 3. **Journal + second brain** ✅ — journal with AI auto-tagging, notes in SQLite, force graph.
-4. **Council of 5** ✅ — personas, challenge pass, consensus meter (Sonnet 4.6; cost-first). Plumbing + view done; persona prompts are v1 to refine.
-5. **Email + accountability + morning brief** ✅ — Gmail read-only triage + cross-agent `jobs.status` flips, goals/streaks/nudge, interest-driven curation. Email + brief need your own credentials to go fully live.
+4. **Council of 5** ✅ — personas, challenge pass, consensus meter (Sonnet 4.6; cost-first). Persona prompts are a grounded v1, still being tuned.
+5. **Email + accountability + morning brief** ✅ — Gmail read-only triage + cross-agent `jobs.status` flips, goals/streaks/nudge, interest-driven curation. Now authorized and live.
 6. **Project archivist** ✅ — git watcher, AI change summaries, tagged graph nodes. Verified on this repo.
 7. **Home command center** ✅ — a cross-agent overview dashboard (stats + agent status + merged activity feed).
 
-**Next:** iterate toward daily use — tune the council/triage/nudge prompts as they're used, and add your own repos to `WATCHED_PROJECTS`.
+### Where it's headed (Phases 8+)
+
+**Phase 8 — Refinement & trust.** Make what exists genuinely good before adding more.
+- Tune every prompt against real use: the council voices (Zeno especially), email triage (promo "special offers" shouldn't read as `urgent`), the accountability nudge's tone, the archivist's summaries.
+- **Agent observability** — a run-history/log view with last-run / next-run times, what each run did, and surfaced errors (agents run unattended; a silent failure is invisible today).
+- **Cost tracking** — per-agent Claude spend against the ~$10–15/mo target, plus a prompt-caching audit to keep it there.
+- First **test suites** per layer (repos, agents, routes) — there are none yet.
+
+**Phase 9 — A deeper second brain.** The graph is the heart of the system; make it do more.
+- Note **edit / delete / search**, manual links between notes, and pinning.
+- Graph upgrades: filter by tag, clustering and timeline views, tag merge/rename, decay so stale nodes fade.
+- **"Ask Nexus anything"** — a unified, cross-agent question box that reasons over the *whole* DB at once (jobs + emails + notes + goals + commits) and answers in one place. The shared context finally talked to directly.
+
+**Phase 10 — Richer agents.** Each existing agent has an obvious next gear.
+- **Calendar** — full month grid, two-way + recurring events, reminders.
+- **Accountability** — quantified goals (numeric targets, real % progress), habit reminders/notifications, an end-of-week review.
+- **Morning brief** — multiple sources with dedup, save-for-later, tunable length, and an audio/TTS read.
+- **Email** — thread summarization, *draft* reply suggestions (still never auto-send), richer status signals (offer vs. rejection nuance), per-sender rules.
+- **Job agent** — tailored-résumé and cover-letter drafts, application-autofill helpers, salary insights.
+- **Archivist** — the `file_save` change type, multi-repo dashboards, diff-level insight, and auto release notes.
+
+**Phase 11 — Proactivity & intelligence.** Stop waiting to be asked.
+- Agents that **learn your preferences** over time — which jobs you act on, which emails actually mattered, which advice you took.
+- Proactive cross-agent nudges ("you journaled about burnout three times this week — want the council?").
+- A daily/weekly **self-review** that reasons across everything and surfaces patterns you'd miss.
+- Smarter model routing (Haiku / Sonnet / Opus) chosen per task to balance quality and cost.
+
+**Phase 12 — New agents & reach.** Same shared-context pattern, new domains.
+- New agents: **finance/budget**, **health/fitness**, **learning/study** — each just a system prompt + a few tables.
+- Desktop/push **notifications** and a responsive layout for the phone.
+- **One-command setup** + packaging so anyone can clone and run it; optional voice input and a quick-capture hotkey.
+
+**Phase 13 — Hardening.** For when it's daily-driving real life.
+- Encryption at rest for the DB, secret hygiene, backup/restore.
+- A schema-migrations framework as the tables evolve.
+- Performance: indexing, pagination, and graph virtualization at scale.
+
+None of this is locked. The point of the shared-context architecture is that any of these slots in without rewiring the rest — so the order will follow whatever turns out to matter most in daily use.
 
 ---
 
