@@ -17,6 +17,7 @@ async function send(method, path, payload) {
 }
 const post = (path, payload) => send('POST', path, payload);
 const put = (path, payload) => send('PUT', path, payload);
+const del = (path) => send('DELETE', path);
 
 export const api = {
   jobs: (params = {}) => {
@@ -42,4 +43,34 @@ export const api = {
   councilHistory: () => get('/council'),
   askCouncil: (question) => post('/council/ask', { question }),
   councilSession: (id) => get(`/council/${id}`),
+
+  // accountability — goals, streaks, check-ins, nudge
+  goals: (status = 'active') => get(`/accountability/goals?status=${status}`),
+  goal: (id) => get(`/accountability/goals/${id}`),
+  createGoal: (goal) => post('/accountability/goals', goal),
+  updateGoal: (id, patch) => put(`/accountability/goals/${id}`, patch),
+  deleteGoal: (id) => del(`/accountability/goals/${id}`),
+  checkinGoal: (id, payload) => post(`/accountability/goals/${id}/checkin`, payload),
+  accountabilityNudge: () => get('/accountability/nudge'),
+  runAccountability: () => post('/accountability/run'),
+
+  // project archivist
+  projects: () => get('/projects'),
+  projectChanges: (name) => get(`/projects/${encodeURIComponent(name)}/changes`),
+  scanProjects: () => post('/projects/scan'),
+
+  // home overview (cross-agent: stats + agent status + activity feed)
+  overview: () => get('/overview'),
+
+  // morning brief
+  brief: (date) => get(`/brief${date ? `?date=${date}` : ''}`),
+  runBrief: () => post('/brief/run'),
+
+  // email agent + calendar
+  emailStatus: () => get('/email/status'),
+  emailStats: () => get('/email/stats'),
+  emailFlags: (importance) => get(`/email/flags${importance ? `?importance=${importance}` : ''}`),
+  runEmail: () => post('/email/run'),
+  calendar: (all = false) => get(`/calendar${all ? '?all=1' : ''}`),
+  addCalendarEvent: (ev) => post('/calendar', ev),
 };

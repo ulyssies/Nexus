@@ -3,6 +3,11 @@ import JobsView from './views/JobsView.jsx';
 import JournalView from './views/JournalView.jsx';
 import GraphView from './views/GraphView.jsx';
 import CouncilView from './views/CouncilView.jsx';
+import GoalsView from './views/GoalsView.jsx';
+import AccountabilityView from './views/AccountabilityView.jsx';
+import ProjectsView from './views/ProjectsView.jsx';
+import HomeView from './views/HomeView.jsx';
+import CalendarView from './views/CalendarView.jsx';
 import Placeholder from './views/Placeholder.jsx';
 
 // Topbar title/subtitle per view — ported from master.html viewMeta.
@@ -103,16 +108,21 @@ export default function App() {
           <span className="topbar-title">{title}</span>
           <span className="topbar-sub">{sub}</span>
           <div className="topbar-spacer" />
-          <div className="topbar-chip"><span className="dot" style={{ background: 'var(--success)' }} />5 agents active</div>
+          <div className="topbar-chip"><span className="dot" style={{ background: 'var(--success)' }} />6 agents active</div>
           <div className="topbar-chip">{dateChip}</div>
           <div className="topbar-chip" style={{ fontFamily: 'var(--font-mono)' }}>{timeChip}</div>
         </header>
 
         <div className="content">
-          {view === 'jobs' ? <JobsView />
+          {view === 'home' ? <HomeView onNavigate={setView} />
+            : view === 'jobs' ? <JobsView />
             : view === 'journal' ? <JournalView />
             : view === 'graph' ? <GraphView />
             : view === 'council' ? <CouncilView />
+            : view === 'goals' ? <GoalsView />
+            : view === 'accountability' ? <AccountabilityView />
+            : view === 'projects' ? <ProjectsView />
+            : view === 'calendar' ? <CalendarView />
             : <Placeholder title={title} />}
         </div>
       </div>
