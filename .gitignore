@@ -9,7 +9,9 @@ server/db/nexus.db
 server/db/nexus.db-shm
 server/db/nexus.db-wal
 credentials.json
+server/credentials.json
 token.json
+server/gmail-token.json
 
 # personal data — never publish (your local copies stay; they're just not committed)
 .claude/settings.local.json
