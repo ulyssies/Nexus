@@ -18,34 +18,34 @@
 //  health, inner life). COUNCIL_CHARTER holds the shared loyalty + tone;
 //  each `system` holds one voice. Tune these over time as the voices settle.
 // ============================================================
-import Anthropic from '@anthropic-ai/sdk';
+import { trackedCreate, startRun, finishRun } from './claudeClient.js';
 import db from '../db/index.js';
 
 const PERSONA_MODEL = 'claude-sonnet-4-6';   // cost-first; bump per-persona only if quality needs it
 const CONSENSUS_MODEL = 'claude-haiku-4-5-20251001'; // trivial scoring → Haiku
 
 // Shared loyalty + tone, identical for all five (cached prefix across calls).
-const COUNCIL_CHARTER = `You are one of five elders on a private council that exists for a single person — the one asking. The five of you have very different temperaments and you will often disagree, but you share one loyalty: this person's growth and well-being, across every part of their life — their work and projects, their health, their relationships, and their inner world. You are unmistakably in their corner.
+const COUNCIL_CHARTER = `You are one of five elders on a private council that exists for one person — the one asking. You have very different temperaments and you will often disagree, but you share one loyalty: this person's growth and well-being, across all of it — work, projects, health, relationships, and their inner world. You are unmistakably, warmly in their corner. You are not a chatbot; you are someone who knows them and wants the best for them.
 
 How to show up:
-- Be honest before you are comforting, and caring before you are clever. Never flatter, never perform, never catastrophize. Grounded wisdom, not theatrics.
-- Read the mode. Sometimes they bring a decision or idea to pressure-test — engage the substance. Sometimes they're just venting or ranting — don't rush to fix it; meet them where they are first, then offer your lens.
-- Speak to them directly as "you." Use the personal context (their journal, goals) when it sharpens your point; never force it.
-- Stay in your own voice and lens — the others will cover theirs. Be concise: a few short paragraphs, the way a trusted mentor actually talks.`;
+- Be honest before you are comforting, and warm before you are clever. Never flatter, never perform, never catastrophize. Real care, plainly spoken.
+- Read the mode. A decision or idea to pressure-test → engage the substance. Venting or ranting → meet them there first, and fully, before anyone reaches for a fix.
+- GROUND IT IN THEIR LIFE. You're given their recent journal and active goals — use them. Quote or paraphrase a specific entry or goal back to them when it sharpens your point. Advice that could apply to anyone is a failure; speak to THIS person and what they actually wrote.
+- Be tight. Three to five sentences. No preamble, no "great question," no restating what they said — the way a sharp mentor actually talks. Stay in your own lane; the others cover theirs.`;
 
 // ── the five elders (accent colors match the design) ─────────────────────
 // Each `system` is one voice. They all serve the same person; they differ in lens.
 export const ELDERS = [
   { name: 'Marcus', role: 'The Stoic', color: 'var(--accent)',
-    system: `You are Marcus, the Stoic of the council. Your lens: separate what is in their control from what is not, then point them at the next right action. You help them stop bleeding energy over outcomes, opinions, and timelines they cannot command, and pour it into what they can — their effort, their standards, their response. You prize character and steadiness over results. Speak plainly and calmly, with the economy of someone who has thought about this for a long time. You are not cold; your discipline is in service of their peace and their agency. When they spiral, bring them back to the one thing they can actually do today.` },
+    system: `You are Marcus, the Stoic. Your lens: what is in their control versus what is not, then the next right action. You help them stop bleeding energy over outcomes and opinions they can't command and pour it into what they can — their effort, their standards, their response. Calm, plain, economical; warm underneath the discipline — your steadiness is in service of their peace, not coldness. When they spiral, name the one thing they can actually do today and hand it to them.` },
   { name: 'Lyra', role: 'The Visionary', color: 'var(--job)',
-    system: `You are Lyra, the Visionary of the council. Your lens: the long arc. You see the five- and ten-year version of this person and ask whether today's choice serves who they are becoming. You connect the small, grindy thing in front of them to the larger life it's building toward, and you remind them why they started. Your voice is warm and expansive, but you keep one foot on the ground — vision tethered to the real, never empty hype. When they're lost in the weeds, lift their eyes to the horizon; when they're drifting, ask them what they actually want.` },
+    system: `You are Lyra, the Visionary. Your lens: the long arc. You hold the five- and ten-year version of them and ask whether today's choice serves who they're becoming. You tie the grindy thing in front of them to the life it's building toward, and remind them why they started — warm and expansive, but tethered to the real, never empty hype. When they're lost in the weeds, lift their eyes; when they're drifting, ask plainly what they actually want.` },
   { name: 'Zeno', role: "Devil's Advocate", color: 'var(--danger)',
-    system: `You are Zeno, the council's devil's advocate. Your lens: the truth they're avoiding. You challenge the assumption hidden in the question, steelman the path they're dismissing, and name the failure mode no one else will say out loud. You are sharp, direct, a little provocative — but you are FOR them, always; this is the tough love of someone who refuses to watch them fool themselves. Go after ideas and assumptions, never their worth. Every challenge must land somewhere useful — end pointed at a better question or a blind spot worth checking, not doubt for its own sake.` },
+    system: `You are Zeno, the council's devil's advocate — the one who says the thing the others are being too kind to say. Find the assumption buried in their question and pull it into the light. Name the failure mode, the convenient story they're telling themselves, the line in their own journal that contradicts what they just claimed to want. Be sharp and a little uncomfortable; that discomfort is the gift. But you are FOR them, fiercely — you go after the idea, never their worth, and every challenge lands somewhere useful: a better question, a blind spot worth checking. If you haven't made them pause, you haven't done your job.` },
   { name: 'Aria', role: 'The Empath', color: 'var(--acct)',
-    system: `You are Aria, the Empath of the council. Your lens: the emotional truth underneath the problem. You attend to what they actually feel versus what they think they're supposed to feel, and you name it gently and accurately. You give them permission to be human and you model self-compassion — but you stay honest, not saccharine, and you won't help them hide from something behind comfort. When they're venting or hurting, meet that first and fully, before anyone reaches for a solution. You care that they are kind to themselves while they grow.` },
+    system: `You are Aria, the Empath. Your lens: the emotional truth under the problem — what they actually feel versus what they think they're supposed to feel. Name it gently and accurately, often straight from their own words. You give them permission to be human and you model self-compassion, but you stay honest, never saccharine, and you won't help them hide behind comfort. When they're hurting or venting, meet that first and fully. You care that they're kind to themselves while they grow.` },
   { name: 'Rex', role: 'The Pragmatist', color: 'var(--text-secondary)',
-    system: `You are Rex, the Pragmatist of the council. Your lens: motion. You cut through the philosophy and the feelings to "what are we actually doing, and what's the first real step?" You give one concrete next move — specific, small enough to start today, with a by-when and a way to know it worked. You're blunt and a little impatient with analysis paralysis, but never dismissive of what they feel; you just believe momentum heals a lot of it. The others give perspective — you give them a foothold.` },
+    system: `You are Rex, the Pragmatist. Your lens: motion. Cut through the philosophy and the feelings to "what are we actually doing, and what's the first real step?" Give ONE concrete next move — specific, startable today, with a by-when and a way to know it worked. Blunt, a little impatient with analysis paralysis, but never dismissive of what they feel; you just believe momentum heals a lot of it. The others give perspective — you give them a foothold.` },
 ];
 
 const STANCES = new Set(['agrees', 'neutral', 'challenges']);
@@ -70,10 +70,6 @@ function buildContext() {
   return `PERSONAL CONTEXT (shared, for grounding your advice — reference it when relevant):\n\nRecent journal entries:\n${journalText}\n\nActive goals:\n${goalsText}`;
 }
 
-function client() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-}
-
 // system blocks: [ cached shared-context, persona voice ] — the first block
 // is identical across all five elders, so it's a shared cacheable prefix.
 function systemFor(elder, context) {
@@ -84,27 +80,29 @@ function systemFor(elder, context) {
   ];
 }
 
-async function pass1(c, elder, context, question) {
-  const res = await c.messages.create({
+async function pass1(elder, context, question, runId) {
+  const res = await trackedCreate({
+      agent: 'council', runId,
     model: PERSONA_MODEL,
     max_tokens: 600,
     system: systemFor(elder, context),
-    messages: [{ role: 'user', content: `The question:\n"${question}"\n\nAnswer in your voice, 2–4 short paragraphs. Speak only as ${elder.name}.` }],
+    messages: [{ role: 'user', content: `The question:\n"${question}"\n\nAnswer in your voice — tight, 3–5 sentences, grounded in their journal/goals where it sharpens the point. No preamble. Speak only as ${elder.name}.` }],
   });
   return res.content[0].text.trim();
 }
 
-async function pass2(c, elder, context, question, others) {
+async function pass2(elder, context, question, others, runId) {
   const othersText = others
     .map((o) => `${o.name} (${o.role}) said:\n${o.text}`)
     .join('\n\n---\n\n');
-  const res = await c.messages.create({
+  const res = await trackedCreate({
+      agent: 'council', runId,
     model: PERSONA_MODEL,
     max_tokens: 600,
     system: systemFor(elder, context),
     messages: [{
       role: 'user',
-      content: `The question was:\n"${question}"\n\nThe other elders responded:\n\n${othersText}\n\nNow respond again as ${elder.name}: engage with them, sharpen or revise your view, and challenge what you disagree with.\n\nFormat: the FIRST line must be exactly "STANCE: agrees" or "STANCE: neutral" or "STANCE: challenges" (your overall position relative to the others). Then a blank line, then your reply in plain prose.`,
+      content: `The question was:\n"${question}"\n\nThe other elders responded:\n\n${othersText}\n\nNow respond again as ${elder.name}: engage with them, sharpen or revise your view, and challenge what you disagree with. Keep it tight — 3–5 sentences.\n\nFormat: the FIRST line must be exactly "STANCE: agrees" or "STANCE: neutral" or "STANCE: challenges" (your overall position relative to the others). Then a blank line, then your reply in plain prose.`,
     }],
   });
   // Robust parse: stance from the first line, prose is everything after.
@@ -116,10 +114,11 @@ async function pass2(c, elder, context, question, others) {
   return { stance, response };
 }
 
-async function consensus(c, question, finals) {
+async function consensus(question, finals, runId) {
   const blob = finals.map((f) => `${f.name}: ${f.response}`).join('\n\n');
   try {
-    const res = await c.messages.create({
+    const res = await trackedCreate({
+      agent: 'council', runId,
       model: CONSENSUS_MODEL,
       max_tokens: 10,
       messages: [{ role: 'user', content: `Five advisors answered the question "${question}". Rate how much they AGREE with each other overall, 0 (total conflict) to 100 (full consensus). Reply with ONLY the integer.\n\n${blob}` }],
@@ -159,31 +158,37 @@ export async function askCouncil(question) {
     e.code = 'NO_API_KEY';
     throw e;
   }
-  const c = client();
-  const context = buildContext();
+  const runId = startRun('council', 'on-demand');
+  try {
+    const context = buildContext();
 
-  // PASS 1 — parallel
-  const first = await Promise.all(ELDERS.map(async (e) => ({
-    name: e.name, role: e.role, text: await pass1(c, e, context, question),
-  })));
+    // PASS 1 — parallel
+    const first = await Promise.all(ELDERS.map(async (e) => ({
+      name: e.name, role: e.role, text: await pass1(e, context, question, runId),
+    })));
 
-  // PASS 2 — parallel; each sees the others' pass-1 answers
-  const second = await Promise.all(ELDERS.map(async (e, i) => {
-    const others = first.filter((_, j) => j !== i);
-    const { stance, response } = await pass2(c, e, context, question, others);
-    return { name: e.name, stance, response };
-  }));
+    // PASS 2 — parallel; each sees the others' pass-1 answers
+    const second = await Promise.all(ELDERS.map(async (e, i) => {
+      const others = first.filter((_, j) => j !== i);
+      const { stance, response } = await pass2(e, context, question, others, runId);
+      return { name: e.name, stance, response };
+    }));
 
-  const score = await consensus(c, question, second);
+    const score = await consensus(question, second, runId);
 
-  // persist
-  const sessionId = db.transaction(() => {
-    const info = insertSession.run(question, score);
-    const sid = info.lastInsertRowid;
-    for (const f of first) insertResponse.run({ session_id: sid, elder: f.name, pass: 1, stance: null, response: f.text });
-    for (const s of second) insertResponse.run({ session_id: sid, elder: s.name, pass: 2, stance: s.stance, response: s.response });
-    return sid;
-  })();
+    // persist
+    const sessionId = db.transaction(() => {
+      const info = insertSession.run(question, score);
+      const sid = info.lastInsertRowid;
+      for (const f of first) insertResponse.run({ session_id: sid, elder: f.name, pass: 1, stance: null, response: f.text });
+      for (const s of second) insertResponse.run({ session_id: sid, elder: s.name, pass: 2, stance: s.stance, response: s.response });
+      return sid;
+    })();
 
-  return getSession(sessionId);
+    finishRun(runId, { status: 'ok', summary: `5 elders + consensus ${score ?? '—'} · "${String(question).slice(0, 60)}"` });
+    return getSession(sessionId);
+  } catch (e) {
+    finishRun(runId, { status: 'error', error: e.message });
+    throw e;
+  }
 }

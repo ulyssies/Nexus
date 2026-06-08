@@ -13,7 +13,7 @@
 //  Degrades gracefully: no credentials / not-yet-authorized / no Anthropic
 //  key each return a clear, non-crashing status the route surfaces.
 // ============================================================
-import Anthropic from '@anthropic-ai/sdk';
+import { trackedCreate, startRun, finishRun } from './claudeClient.js';
 import { getGmailClient, gmailStatus } from './gmailAuth.js';
 import { EMAIL_SCAN_COUNT } from '../config.js';
 import { upsertFlag, flagExists, addCalendarEvent, findJobByCompany, setJobStatus } from '../db/emailRepo.js';
@@ -23,9 +23,7 @@ const MODEL = 'claude-sonnet-4-6'; // importance + status inference; Sonnet, not
 // classifier signal → jobs.status (only "real movement" maps to a flip)
 const SIGNAL_TO_STATUS = { applied: 'applied', interviewing: 'interviewing', offer: 'offer', rejected: 'rejected' };
 
-function client() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }); }
-
-const header = (headers, name) => (headers.find((h) => h.name.toLowerCase() === name.toLowerCase()) || {}).value || '';
+const header =(headers, name) => (headers.find((h) => h.name.toLowerCase() === name.toLowerCase()) || {}).value || '';
 // "Jane Doe <jane@acme.com>" → { name, email }
 function parseFrom(from) {
   const m = from.match(/^\s*"?([^"<]*)"?\s*<([^>]+)>/) || from.match(/^\s*<?([^<>]+@[^<>]+)>?\s*$/);
@@ -61,7 +59,7 @@ async function fetchMessages(gmail) {
 }
 
 // One Claude call classifies the whole batch. Returns a Map index→classification.
-async function classify(messages) {
+async function classify(messages, runId = null) {
   if (!messages.length) return new Map();
   if (!process.env.ANTHROPIC_API_KEY) {
     // no key: store everything as 'normal', no deadlines/status inference
@@ -69,7 +67,8 @@ async function classify(messages) {
   }
   const list = messages.map((m, i) =>
     `[${i}] From: ${m.sender} <${m.sender_email}>\n    Subject: ${m.subject}\n    Snippet: ${m.snippet}`).join('\n\n');
-  const res = await client().messages.create({
+  const res = await trackedCreate({
+    agent: 'email', runId,
     model: MODEL,
     max_tokens: 1500,
     system: `You triage a job-seeker's inbox. For each email, decide:
@@ -104,13 +103,16 @@ export async function runEmailAgent({ trigger = 'cron' } = {}) {
     return { skipped: true, reason: e.code || 'AUTH_ERROR', error: e.message, processed: 0 };
   }
 
+  const runId = startRun('email', trigger);
+  try {
   const messages = await fetchMessages(gmail);
   if (!messages.length) {
     console.log(`[email:${trigger}] no new messages`);
+    finishRun(runId, { status: 'ok', summary: 'no new messages' });
     return { processed: 0, flagged: 0, deadlines: 0, statusUpdates: 0 };
   }
 
-  const classifications = await classify(messages);
+  const classifications = await classify(messages, runId);
   let flagged = 0, deadlines = 0, statusUpdates = 0;
 
   for (let i = 0; i < messages.length; i++) {
@@ -167,7 +169,12 @@ export async function runEmailAgent({ trigger = 'cron' } = {}) {
   }
 
   console.log(`[email:${trigger}] ${flagged} flagged · ${deadlines} deadlines · ${statusUpdates} job status updates`);
-  return { processed: messages.length, flagged, deadlines, statusUpdates };
+    finishRun(runId, { status: 'ok', summary: `${flagged} flagged · ${deadlines} deadlines · ${statusUpdates} job updates` });
+    return { processed: messages.length, flagged, deadlines, statusUpdates };
+  } catch (e) {
+    finishRun(runId, { status: 'error', error: e.message });
+    throw e;
+  }
 }
 
 export { gmailStatus };

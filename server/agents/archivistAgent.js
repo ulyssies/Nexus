@@ -21,7 +21,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { simpleGit } from 'simple-git';
 import chokidar from 'chokidar';
-import Anthropic from '@anthropic-ai/sdk';
+import { trackedCreate, startRun, finishRun } from './claudeClient.js';
 import { WATCHED_PROJECTS } from '../config.js';
 import { recordChange, hasCommit } from '../db/projectChangesRepo.js';
 import { setNoteTags, getAllTagNames } from '../db/notesRepo.js';
@@ -30,8 +30,6 @@ import { tagNote } from './tagAgent.js';
 const MODEL = 'claude-sonnet-4-6'; // change synthesis — judgement, but routine → Sonnet
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'; // git's canonical empty tree (root-commit diffs)
 const MAX_SCAN = 25; // most new commits to ingest per scan (avoids huge first-run backfills)
-
-function client() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 // diff stats for a commit; handles the root commit (no parent) via the empty tree.
 async function commitStat(git, hash) {
@@ -51,7 +49,7 @@ async function commitStat(git, hash) {
 
 // Ask Claude to synthesize a commit into summary/why/impact. Falls back to the
 // raw commit message (no key or error) so a change is never lost.
-async function summarize(project, commit, stat) {
+async function summarize(project, commit, stat, runId = null) {
   const subject = commit.message.split('\n')[0];
   const fallback = {
     summary: subject,
@@ -61,7 +59,8 @@ async function summarize(project, commit, stat) {
   if (!process.env.ANTHROPIC_API_KEY) return fallback;
 
   try {
-    const res = await client().messages.create({
+    const res = await trackedCreate({
+      agent: 'archivist', runId,
       model: MODEL,
       max_tokens: 300,
       system: `You are a code archivist. Given a git commit, write a short, plain-English record of the change for the developer's personal memory. Respond with ONLY a JSON object: {"summary": "one sentence — what changed", "why": "the intent/reason, or null if not inferable", "impact": "the practical effect, or null"}. No markdown, no extra text. Be concrete and specific to this commit; do not invent details not supported by the message or files.`,
@@ -90,7 +89,7 @@ Lines: +${stat.insertions} / -${stat.deletions}`,
  * Scan one project for new commits and record them (oldest→newest so history
  * reads in order). Returns { project, recorded, skipped:boolean, reason? }.
  */
-export async function scanProject(project) {
+export async function scanProject(project, trigger = 'cron') {
   if (!existsSync(project.path) || !existsSync(join(project.path, '.git'))) {
     return { project: project.name, recorded: 0, skipped: true, reason: 'not a git repo / path missing' };
   }
@@ -109,33 +108,40 @@ export async function scanProject(project) {
   }
   if (!fresh.length) return { project: project.name, recorded: 0 };
 
-  let recorded = 0;
-  for (const commit of fresh.reverse()) { // oldest first
-    const stat = await commitStat(git, commit.hash);
-    const { summary, why, impact } = await summarize(project, commit, stat);
-    const row = recordChange({
-      project_name: project.name,
-      project_path: project.path,
-      change_type: 'commit',
-      commit_hash: commit.hash,
-      summary, why, impact,
-      diff_stat: stat.files ? `${stat.files} files, +${stat.insertions}/-${stat.deletions}` : null,
-      changed_at: commit.date,
-    });
-    if (row) {
-      recorded += 1;
-      // Tag the change's graph node so project work connects to journal themes
-      // via shared tags (the "archivist feeds the second brain" link). Reuses
-      // existing tags to keep the graph connected; best-effort, no key → no-op.
-      try {
-        const { tags } = await tagNote({ title: project.name, body: `${summary}\n${why || ''}\n${impact || ''}` }, getAllTagNames());
-        if (tags.length) setNoteTags(row.note_id, tags);
-      } catch (e) {
-        console.error(`  [WARN] archivist tagging failed (${project.name}): ${e.message}`);
+  const runId = startRun('archivist', trigger);
+  try {
+    let recorded = 0;
+    for (const commit of fresh.reverse()) { // oldest first
+      const stat = await commitStat(git, commit.hash);
+      const { summary, why, impact } = await summarize(project, commit, stat, runId);
+      const row = recordChange({
+        project_name: project.name,
+        project_path: project.path,
+        change_type: 'commit',
+        commit_hash: commit.hash,
+        summary, why, impact,
+        diff_stat: stat.files ? `${stat.files} files, +${stat.insertions}/-${stat.deletions}` : null,
+        changed_at: commit.date,
+      });
+      if (row) {
+        recorded += 1;
+        // Tag the change's graph node so project work connects to journal themes
+        // via shared tags (the "archivist feeds the second brain" link). Reuses
+        // existing tags to keep the graph connected; best-effort, no key → no-op.
+        try {
+          const { tags } = await tagNote({ title: project.name, body: `${summary}\n${why || ''}\n${impact || ''}` }, getAllTagNames(), { runId });
+          if (tags.length) setNoteTags(row.note_id, tags);
+        } catch (e) {
+          console.error(`  [WARN] archivist tagging failed (${project.name}): ${e.message}`);
+        }
       }
     }
+    finishRun(runId, { status: 'ok', summary: `${project.name}: recorded ${recorded} change${recorded === 1 ? '' : 's'}` });
+    return { project: project.name, recorded };
+  } catch (e) {
+    finishRun(runId, { status: 'error', error: e.message });
+    throw e;
   }
-  return { project: project.name, recorded };
 }
 
 /** Scan every watched project. Called by the cron and the manual route. */
@@ -143,7 +149,7 @@ export async function runArchivist({ trigger = 'cron' } = {}) {
   const results = [];
   for (const project of WATCHED_PROJECTS) {
     try {
-      results.push(await scanProject(project));
+      results.push(await scanProject(project, trigger));
     } catch (e) {
       console.error(`[archivist:${trigger}] ${project.name} scan failed: ${e.message}`);
       results.push({ project: project.name, recorded: 0, error: e.message });

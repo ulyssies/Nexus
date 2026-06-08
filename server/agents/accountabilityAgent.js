@@ -21,17 +21,13 @@
 //  regenerated whenever the user opens the view. (A future phase can email it
 //  or, like the council, store sessions; v1 keeps it ephemeral and cheap.)
 // ============================================================
-import Anthropic from '@anthropic-ai/sdk';
+import { trackedCreate, withRun } from './claudeClient.js';
 import db from '../db/index.js';
 import { listGoals, goalsNeedingCheckin, recomputeStreak } from '../db/goalsRepo.js';
 
 const MODEL = 'claude-sonnet-4-6'; // tone + judgement, but routine → Sonnet, not Opus
 
 const SYSTEM = `You are the accountability voice of a personal AI system — a steady, encouraging coach who has watched this person work toward their goals. You are warm but never saccharine, and you are honest: you celebrate real streaks and you name a slip without shaming it. You speak directly to the person as "you", briefly (3–5 sentences total for the whole message, not per goal). You are nudging them to check in on the goals they haven't logged today. Reference their streaks specifically when it helps motivate ("you're 11 days into the gym — don't break it tonight"). Close with a small, concrete ask. No headers, no markdown, no lists — just a short human paragraph.`;
-
-function client() {
-  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-}
 
 // Recent journal entries give the nudge emotional context (matches council).
 function recentJournal(limit = 4) {
@@ -54,7 +50,7 @@ function templateNudge(pending) {
  * Returns { message, pending: goalsNeedingCheckin, source: 'ai'|'template' }.
  * Never throws — falls back to a template on missing key or API error.
  */
-export async function nudge(date) {
+export async function nudge(date, runId = null) {
   const pending = goalsNeedingCheckin(date);
   if (!process.env.ANTHROPIC_API_KEY) {
     return { message: templateNudge(pending), pending, source: 'template' };
@@ -73,7 +69,8 @@ export async function nudge(date) {
   const journalText = journal.length ? `\n\nRecent journal (for tone, reference only if it helps):\n${journal.map((j) => `- ${j}`).join('\n')}` : '';
 
   try {
-    const res = await client().messages.create({
+    const res = await trackedCreate({
+      agent: 'accountability', runId,
       model: MODEL,
       max_tokens: 300,
       system: SYSTEM,
@@ -102,8 +99,10 @@ export function rollover() {
 
 /** Convenience for the cron: refresh streaks, then build (and log) the nudge. */
 export async function runAccountability({ trigger = 'cron' } = {}) {
-  const { refreshed } = rollover();
-  const { message, pending, source } = await nudge();
-  console.log(`[accountability:${trigger}] refreshed ${refreshed} streaks, ${pending.length} pending (${source})`);
-  return { refreshed, pending, message, source };
+  return withRun('accountability', trigger, async (runId) => {
+    const { refreshed } = rollover();
+    const { message, pending, source } = await nudge(undefined, runId);
+    console.log(`[accountability:${trigger}] refreshed ${refreshed} streaks, ${pending.length} pending (${source})`);
+    return { refreshed, pending, message, source, summary: `refreshed ${refreshed} streaks · ${pending.length} pending · ${source}` };
+  });
 }
