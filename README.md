@@ -11,7 +11,8 @@ The shared context **is** the product. Most AI assistants are a handful of disco
 - **Command center** — one home dashboard with live stats, every agent's status, and a merged activity feed across all of them.
 - **Job matching** — pulls live listings and ranks them against your résumé with Claude.
 - **Inbox triage** (read-only) — flags what's urgent, pulls deadlines onto your calendar, and updates job statuses when a recruiter writes back.
-- **Second brain** — journal entries and notes are auto-tagged and linked into a force-graph; shared tags become the edges.
+- **Second brain** — journal entries, notes, and research are auto-tagged and linked into a force-graph; shared tags become the edges, and an optional hierarchy (concepts → children) adds directional structure.
+- **Research agent** — a chat-based research interface; explore a topic (paste articles, fetch URLs, ask questions), then distill the whole session into one permanent structured knowledge node.
 - **Council of 5** — five AI personas debate your decisions and rants, challenge each other, and land on a consensus.
 - **Accountability** — tracks goals, maintains streaks, and sends a nightly streak-aware nudge.
 - **Morning brief** — learns your interests from your own notes (and tags you set) and curates a short daily news read.
@@ -47,9 +48,15 @@ Live listings fetched from Adzuna / The Muse / Jobicy, scored 0–100 against yo
 
 ### Second brain — the knowledge graph
 
-Every note (journal entry, free note, or an archivist's commit summary) is a **node**; any two notes that share a tag get an **edge**. The result is a force-directed graph (`react-force-graph-2d`) you can pan, zoom, and click to preview a node. Untagged notes show dim; well-connected themes cluster. This is the "nervous system" the council and morning brief read from. The edges are produced entirely by the **tagging agent** (described below).
+Every note (journal entry, research node, or an archivist's commit summary) is a **node**; any two notes that share a tag get an **edge**. The result is a force-directed graph (`react-force-graph-2d`) you can pan, zoom, and click to preview a node. Untagged notes show dim; well-connected themes cluster. On top of that flat, associative web sits an optional **hierarchy**: *concept* nodes are organizational anchors ("Interview Prep", "Projects") and any note can be filed under one, creating **directed parent→child edges** (drawn with arrows) that are distinct from the undirected tag edges. The flat layer is pure Zettelkasten; the hierarchy makes it navigable. This is the "nervous system" the council and morning brief read from.
 
 ![Second brain — the knowledge graph](docs/screenshots/graph.png)
+
+### Research — chat that becomes knowledge
+
+A chat-based research interface. Open a session on a topic, then have a real conversation — **paste articles, fetch a URL, ask follow-ups, go down rabbit holes**. The raw conversation is ephemeral working memory. When you're done, hit **save session** and the agent reads the *entire* conversation and distills it into one permanent, structured knowledge node: a topic, a summary of what you learned, key concepts (which become its tags), conclusions, the **open questions** that came up but went unanswered (tracked over time), and the sources used. You can file the node under a concept on save, so it joins the hierarchy. This is the system's richest source of new nodes — and the foundation of the eventual "Ask Nexus anything" query layer over everything you've learned.
+
+![Research — chat that distills into a knowledge node](docs/screenshots/research.png)
 
 ### Journal — free writing, auto-organized
 
@@ -234,6 +241,7 @@ npm run migrate:jobs /path/to/jobs.json   # one-time import of a legacy job-agen
 | **Morning brief** | Built (Phase 5) | Learns your interests from the second brain (note tags + goals) and user-set steering tags, fetches NewsAPI, and condenses ~6 stories into a morning read. Needs a real `NEWS_API_KEY`. |
 | **Project archivist** | Built (Phase 6) | Watches your code dirs, summarizes each commit with Claude into `project_changes` + a tagged second-brain graph node. Sandboxed to `WATCHED_PROJECTS`. Verified on this repo. |
 | **Tagging agent** | Live (Phase 3) | Behind-the-scenes: auto-tags every new note, reusing existing tags so the graph stays connected. |
+| **Research agent** | Built (Phase 9) | Chat-based research sessions that distill into one structured second-brain node (summary, concepts, conclusions, tracked open questions, sources). Paste text, fetch URLs, or freeform Q&A. |
 | **Observability layer** | Built (Phase 8) | Not an agent but the plumbing around them: instruments every run + Claude call into `agent_runs`/`agent_usage`, exposed via `GET /api/observability` and the Settings panel (run history, errors, next run, cost per agent/day). |
 
 ---
@@ -277,16 +285,11 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full file-by-file tree and architecture n
 6. **Project archivist** — git watcher, AI change summaries, tagged graph nodes. Verified on this repo.
 7. **Home command center** — a cross-agent overview dashboard (stats + agent status + merged activity feed).
 8. **Observability & cost (Phase 8)** — every agent run + Claude call instrumented (`agent_runs` / `agent_usage`); a Settings panel with run history, surfaced errors, next-run times, and estimated cost per agent + per day; plus UI **agent-steering** tags for the morning brief. Council voices tuned (sharper, more concise, journal-grounded).
+9. **Research agent + hierarchical second brain (Phase 9)** — chat research sessions that distill into one structured knowledge node (summary, concepts, conclusions, tracked open questions, sources); plus a hierarchy layer (concept anchors, `parent_id`, directed parent→child graph edges) on top of the flat tag graph. The tagging agent's flat logic is left untouched.
 
-### Where it's headed (Phases 9+)
+### Where it's headed (Phases 10+)
 
-**Phase 8 (remaining) — Trust hardening.** Still open: first test suites per layer (repos / agents / routes), a prompt-cache cost audit, and further email-triage / nudge tuning.
-
-**Phase 9 — Research agent + a hierarchical second brain.** The richest new source of knowledge, and the structure to hold it.
-- **Research agent** — a chat-based research interface. Open a session, paste articles, fetch URLs, dump lecture notes, ask follow-ups, go down rabbit holes. The raw conversation is ephemeral; on **save session** the agent condenses the whole thing into one permanent, structured knowledge node: topic, what you learned, key concepts (tagged), conclusions reached, the **open questions** that came up but went unanswered, sources, and links to connected nodes. Input formats: pasted article text, raw URL fetch, freeform Q&A, lecture-note dumps, project working sessions.
-- **A hierarchy layer on the graph.** Today connections are purely associative (shared tags). Add directional parent→child structure so the flat web becomes a clustered, navigable knowledge graph. Three levels: **parent** nodes (pure organizational anchors — "Interview Prep", "Projects" — no content of their own), **concept** nodes (the middle layer — "Technical Communication" under Interview Prep), and **leaf** nodes (journal entries, research outputs, archivist summaries). Schema additions: `parent_id`, `node_type` (journal / research / concept / archivist), and `is_concept` on `notes`; a `directed` flag on graph links so the frontend renders hierarchy edges differently from tag edges. **Additive** — the tagging agent's flat-connection logic is left untouched.
-- **Cross-agent.** Research nodes link to a parent (interview prep → the Interview Prep node; project research → that project's node); their tags feed the morning brief; the council can reference your research when you ask related questions; open questions become trackable over time.
-- This is the foundation of **"Ask Nexus anything"** — once enough research/knowledge nodes exist, a query layer answers questions across your entire knowledge base, grounded in what you actually learned. The system becomes a record of your intellectual history: not just what you did, but what you understood and what you still don't know.
+**Phase 8/9 (remaining).** First test suites per layer (repos / agents / routes); a prompt-cache cost audit; **"Ask Nexus anything"** — a query layer over the accumulated knowledge/research nodes that answers across your whole second brain; resurfacing tracked open questions in the morning brief.
 
 **Phase 10 — Richer agents.** Each existing agent has an obvious next gear.
 - **Calendar** — full month grid, two-way + recurring events, reminders.
