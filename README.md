@@ -14,8 +14,9 @@ The shared context **is** the product. Most AI assistants are a handful of disco
 - **Second brain** — journal entries and notes are auto-tagged and linked into a force-graph; shared tags become the edges.
 - **Council of 5** — five AI personas debate your decisions and rants, challenge each other, and land on a consensus.
 - **Accountability** — tracks goals, maintains streaks, and sends a nightly streak-aware nudge.
-- **Morning brief** — learns your interests from your own notes and curates a short daily news read.
+- **Morning brief** — learns your interests from your own notes (and tags you set) and curates a short daily news read.
 - **Project archivist** — watches your repos and turns commits into plain-English memory and graph nodes.
+- **Observability & cost** — every agent run and every Claude call is instrumented; a Settings panel shows per-agent run history, surfaced errors, next scheduled run, and estimated spend per agent and per day.
 
 **Local-only by design.** Nexus runs on `localhost`, is never exposed publicly, and ships as a repo you clone and point at your own API keys. Filesystem and inbox access are exactly why it stays on your machine.
 
@@ -94,6 +95,19 @@ Per-repo cards with an AI-written change log. The **project archivist** polls `g
 ### Behind the scenes — the tagging agent
 
 Not a tab, but the connective tissue of the whole system. The **tagging agent** (`agents/tagAgent.js`) runs whenever a note is created — a journal entry on save, or an archivist commit summary. It is given the note text *and the list of tags already in your second brain*, and told to **reuse an existing tag whenever one fits** before inventing a new one. That reuse is what keeps the graph connected instead of fragmenting into one-off tags, and it is why a commit about the council feature can end up edge-connected to a journal entry about your career. It degrades gracefully with no API key — the note still saves, just untagged.
+
+### Settings — observability, cost, and agent steering
+
+Six agents run unattended on cron schedules, so the system needs to be observable. Every agent run and every Claude call is instrumented through a single wrapper, and this panel surfaces it:
+
+- **Per-agent run history** — when each agent last ran, the trigger (cron / manual / on-demand), success or failure, a one-line summary of what it did, and the **next scheduled run** (computed from each agent's cron expression).
+- **Cost tracking** — token usage is captured on every call and priced from published per-model rates, rolled up as **estimated spend per agent, today's total, and a daily trend**. A council question costs ~11 calls; now you can see exactly what each agent costs.
+- **Error log** — failed runs surface here with their message, so a silent 6am failure is no longer invisible.
+- **Agent steering** — clickable interest tags that direct the morning brief's news search (`world cup`, `AI research`, …) without editing any config file. The agent merges your picks with what it learns from your journal.
+
+![Settings — observability, cost, and agent steering](docs/screenshots/settings.png)
+
+> **Engineering note (the part a reviewer might care about):** the observability layer is a single instrumented Claude client (`agents/claudeClient.js`) that every agent routes through. It brackets each run in an `agent_runs` row and logs token counts + estimated cost to `agent_usage`, all best-effort so telemetry can never break an agent. A read-only `GET /api/observability` aggregates last/next run, errors, and cost rollups in one query. It's LLM cost-and-reliability telemetry for a fleet of scheduled agents — built the way you'd want production AI infrastructure to work, at personal scale.
 
 ---
 
@@ -217,8 +231,10 @@ npm run migrate:jobs /path/to/jobs.json   # one-time import of a legacy job-agen
 | **Email agent** | Built (Phase 5) | Reads Gmail (read-only), classifies importance, extracts deadlines into the calendar, and auto-updates `jobs.status` by matching companies. Needs a one-time `npm run gmail:auth`; no-ops gracefully until then. |
 | **Council of 5** | Live (Phase 4) | Five personas (Marcus/Lyra/Zeno/Aria/Rex) answer in parallel, challenge each other, and a consensus score is computed. Reads journal + goals. Persona prompts are v1 to refine. |
 | **Accountability** | Built (Phase 5) | Tracks goals, maintains streaks (cache rebuilt from check-in history), and sends a nightly streak-aware nudge. Verified live. |
-| **Morning brief** | Built (Phase 5) | Learns your interests from the second brain (note tags + goals), fetches NewsAPI, and condenses ~6 stories into a morning read. Needs a real `NEWS_API_KEY`. |
+| **Morning brief** | Built (Phase 5) | Learns your interests from the second brain (note tags + goals) and user-set steering tags, fetches NewsAPI, and condenses ~6 stories into a morning read. Needs a real `NEWS_API_KEY`. |
 | **Project archivist** | Built (Phase 6) | Watches your code dirs, summarizes each commit with Claude into `project_changes` + a tagged second-brain graph node. Sandboxed to `WATCHED_PROJECTS`. Verified on this repo. |
+| **Tagging agent** | Live (Phase 3) | Behind-the-scenes: auto-tags every new note, reusing existing tags so the graph stays connected. |
+| **Observability layer** | Built (Phase 8) | Not an agent but the plumbing around them: instruments every run + Claude call into `agent_runs`/`agent_usage`, exposed via `GET /api/observability` and the Settings panel (run history, errors, next run, cost per agent/day). |
 
 ---
 
@@ -260,19 +276,17 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full file-by-file tree and architecture n
 5. **Email + accountability + morning brief** — Gmail read-only triage + cross-agent `jobs.status` flips, goals/streaks/nudge, interest-driven curation. Now authorized and live.
 6. **Project archivist** — git watcher, AI change summaries, tagged graph nodes. Verified on this repo.
 7. **Home command center** — a cross-agent overview dashboard (stats + agent status + merged activity feed).
+8. **Observability & cost (Phase 8)** — every agent run + Claude call instrumented (`agent_runs` / `agent_usage`); a Settings panel with run history, surfaced errors, next-run times, and estimated cost per agent + per day; plus UI **agent-steering** tags for the morning brief. Council voices tuned (sharper, more concise, journal-grounded).
 
-### Where it's headed (Phases 8+)
+### Where it's headed (Phases 9+)
 
-**Phase 8 — Refinement & trust.** Make what exists genuinely good before adding more.
-- Tune every prompt against real use: the council voices (Zeno especially), email triage (promo "special offers" shouldn't read as `urgent`), the accountability nudge's tone, the archivist's summaries.
-- **Agent observability** — a run-history/log view with last-run / next-run times, what each run did, and surfaced errors (agents run unattended; a silent failure is invisible today).
-- **Cost tracking** — per-agent Claude spend against the ~$10–15/mo target, plus a prompt-caching audit to keep it there.
-- First **test suites** per layer (repos, agents, routes) — there are none yet.
+**Phase 8 (remaining) — Trust hardening.** Still open: first test suites per layer (repos / agents / routes), a prompt-cache cost audit, and further email-triage / nudge tuning.
 
-**Phase 9 — A deeper second brain.** The graph is the heart of the system; make it do more.
-- Note **edit / delete / search**, manual links between notes, and pinning.
-- Graph upgrades: filter by tag, clustering and timeline views, tag merge/rename, decay so stale nodes fade.
-- **"Ask Nexus anything"** — a unified, cross-agent question box that reasons over the *whole* DB at once (jobs + emails + notes + goals + commits) and answers in one place. The shared context finally talked to directly.
+**Phase 9 — Research agent + a hierarchical second brain.** The richest new source of knowledge, and the structure to hold it.
+- **Research agent** — a chat-based research interface. Open a session, paste articles, fetch URLs, dump lecture notes, ask follow-ups, go down rabbit holes. The raw conversation is ephemeral; on **save session** the agent condenses the whole thing into one permanent, structured knowledge node: topic, what you learned, key concepts (tagged), conclusions reached, the **open questions** that came up but went unanswered, sources, and links to connected nodes. Input formats: pasted article text, raw URL fetch, freeform Q&A, lecture-note dumps, project working sessions.
+- **A hierarchy layer on the graph.** Today connections are purely associative (shared tags). Add directional parent→child structure so the flat web becomes a clustered, navigable knowledge graph. Three levels: **parent** nodes (pure organizational anchors — "Interview Prep", "Projects" — no content of their own), **concept** nodes (the middle layer — "Technical Communication" under Interview Prep), and **leaf** nodes (journal entries, research outputs, archivist summaries). Schema additions: `parent_id`, `node_type` (journal / research / concept / archivist), and `is_concept` on `notes`; a `directed` flag on graph links so the frontend renders hierarchy edges differently from tag edges. **Additive** — the tagging agent's flat-connection logic is left untouched.
+- **Cross-agent.** Research nodes link to a parent (interview prep → the Interview Prep node; project research → that project's node); their tags feed the morning brief; the council can reference your research when you ask related questions; open questions become trackable over time.
+- This is the foundation of **"Ask Nexus anything"** — once enough research/knowledge nodes exist, a query layer answers questions across your entire knowledge base, grounded in what you actually learned. The system becomes a record of your intellectual history: not just what you did, but what you understood and what you still don't know.
 
 **Phase 10 — Richer agents.** Each existing agent has an obvious next gear.
 - **Calendar** — full month grid, two-way + recurring events, reminders.
