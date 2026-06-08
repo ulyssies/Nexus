@@ -260,6 +260,57 @@ CREATE TABLE IF NOT EXISTS council_responses (
 CREATE INDEX IF NOT EXISTS idx_council_responses_session ON council_responses(session_id);
 
 -- ============================================================
+--  OBSERVABILITY — every agent run + every Claude call is logged here so
+--  the Settings panel can show what ran, what failed, and what it cost.
+--  agent_runs = one row per run (cron/manual/on-demand); agent_usage = one
+--  row per Claude call, linked to its run, with token counts + estimated $.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id           INTEGER PRIMARY KEY,
+  agent        TEXT NOT NULL,                  -- job | email | council | accountability | brief | archivist | tag
+  trigger      TEXT NOT NULL DEFAULT 'manual'  -- cron | manual | on-demand
+                 CHECK (trigger IN ('cron','manual','on-demand','boot')),
+  status       TEXT NOT NULL DEFAULT 'running'
+                 CHECK (status IN ('running','ok','error','skipped')),
+  summary      TEXT,                            -- one-line "what it did"
+  error        TEXT,                            -- message if status='error'
+  started_at   TEXT NOT NULL DEFAULT (datetime('now')),
+  finished_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_agent   ON agent_runs(agent);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_started ON agent_runs(started_at);
+CREATE INDEX IF NOT EXISTS idx_agent_runs_status  ON agent_runs(status);
+
+CREATE TABLE IF NOT EXISTS agent_usage (
+  id                 INTEGER PRIMARY KEY,
+  run_id             INTEGER REFERENCES agent_runs(id) ON DELETE SET NULL,
+  agent              TEXT NOT NULL,
+  model              TEXT NOT NULL,
+  input_tokens       INTEGER NOT NULL DEFAULT 0,
+  output_tokens      INTEGER NOT NULL DEFAULT 0,
+  cache_read_tokens  INTEGER NOT NULL DEFAULT 0,
+  cache_write_tokens INTEGER NOT NULL DEFAULT 0,
+  cost_usd           REAL NOT NULL DEFAULT 0,   -- estimated, from published per-model rates
+  created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_agent_usage_agent   ON agent_usage(agent);
+CREATE INDEX IF NOT EXISTS idx_agent_usage_created ON agent_usage(created_at);
+CREATE INDEX IF NOT EXISTS idx_agent_usage_run     ON agent_usage(run_id);
+
+-- ============================================================
+--  AGENT STEERING — user-set knobs the agents read, editable from Settings
+--  (no file edits). brief_interests are clickable topic tags that bias the
+--  morning brief's news search; the agent merges the ACTIVE ones with the
+--  interests it learns from the second brain.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS brief_interests (
+  id         INTEGER PRIMARY KEY,
+  label      TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  active     INTEGER NOT NULL DEFAULT 1,        -- 0/1 toggle
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
 --  updated_at touch triggers for the mutable tables
 -- ============================================================
 CREATE TRIGGER IF NOT EXISTS trg_notes_updated AFTER UPDATE ON notes

@@ -66,6 +66,15 @@ export const api = {
   brief: (date) => get(`/brief${date ? `?date=${date}` : ''}`),
   runBrief: () => post('/brief/run'),
 
+  // brief interest steering (Settings → direct the news agent)
+  briefInterests: () => get('/brief/interests'),
+  addBriefInterest: (label) => post('/brief/interests', { label }),
+  toggleBriefInterest: (id) => put(`/brief/interests/${id}/toggle`),
+  deleteBriefInterest: (id) => del(`/brief/interests/${id}`),
+
+  // observability (Settings → agent runs, errors, cost)
+  observability: () => get('/observability'),
+
   // email agent + calendar
   emailStatus: () => get('/email/status'),
   emailStats: () => get('/email/stats'),

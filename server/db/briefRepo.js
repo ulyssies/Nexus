@@ -76,3 +76,48 @@ export function learnInterests(limit = 5) {
   }
   return interests.slice(0, limit);
 }
+
+// ── user-steered interests (Settings → brief tags) ──────────────────────────
+// Clickable topic tags the user adds to direct the news search WITHOUT editing
+// config. Active ones are merged ahead of the auto-learned interests.
+const insertInterest = db.prepare(
+  'INSERT INTO brief_interests (label) VALUES (?) ON CONFLICT(label) DO UPDATE SET active = 1');
+
+export function listInterests() {
+  return db.prepare('SELECT id, label, active, created_at FROM brief_interests ORDER BY created_at DESC').all();
+}
+
+export function addInterest(label) {
+  const clean = String(label || '').trim();
+  if (!clean) throw new Error('interest label is required');
+  insertInterest.run(clean);
+  return db.prepare('SELECT id, label, active, created_at FROM brief_interests WHERE label = ? COLLATE NOCASE').get(clean);
+}
+
+export function toggleInterest(id) {
+  db.prepare('UPDATE brief_interests SET active = CASE WHEN active = 1 THEN 0 ELSE 1 END WHERE id = ?').run(id);
+  return db.prepare('SELECT id, label, active FROM brief_interests WHERE id = ?').get(id);
+}
+
+export function deleteInterest(id) {
+  return db.prepare('DELETE FROM brief_interests WHERE id = ?').run(id).changes > 0;
+}
+
+const activeInterestLabels = () =>
+  db.prepare('SELECT label FROM brief_interests WHERE active = 1 ORDER BY created_at DESC').all().map((r) => r.label);
+
+/**
+ * The interests the morning brief actually searches on: the user's active
+ * picks first (explicit steering), then the auto-learned ones, deduped.
+ */
+export function effectiveInterests() {
+  const user = activeInterestLabels();
+  const learned = learnInterests(6);
+  const seen = new Set();
+  const out = [];
+  for (const term of [...user, ...learned]) {
+    const key = String(term).toLowerCase().trim();
+    if (key && !seen.has(key)) { seen.add(key); out.push(term); }
+  }
+  return out.slice(0, 8);
+}

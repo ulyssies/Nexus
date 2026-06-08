@@ -14,14 +14,12 @@
 //    - no ANTHROPIC key → keep the articles, use each source's own description
 //      as the item summary (no AI condense). Nothing crashes.
 // ============================================================
-import Anthropic from '@anthropic-ai/sdk';
-import { learnInterests, saveBrief, getBrief } from '../db/briefRepo.js';
+import { trackedCreate, startRun, finishRun } from './claudeClient.js';
+import { effectiveInterests, saveBrief, getBrief } from '../db/briefRepo.js';
 import { BRIEF_ARTICLE_COUNT, BRIEF_LOOKBACK_DAYS } from '../config.js';
 
 const MODEL = 'claude-sonnet-4-6';
 const today = () => new Date().toISOString().slice(0, 10);
-
-function client() { return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY }); }
 
 // Pull recent articles for the interests from NewsAPI. Returns [] on no key.
 async function fetchNews(interests) {
@@ -57,7 +55,7 @@ async function fetchNews(interests) {
 
 // Condense the fetched articles + write a TL;DR intro. Falls back to raw
 // descriptions (and a templated intro) when no Anthropic key is present.
-async function condense(interests, articles) {
+async function condense(interests, articles, runId = null) {
   const fallbackIntro = articles.length
     ? `${articles.length} stories today across ${interests.slice(0, 3).join(', ') || 'your interests'}.`
     : 'No fresh stories matched your interests today.';
@@ -74,7 +72,8 @@ async function condense(interests, articles) {
   try {
     const list = articles.map((a, i) =>
       `[${i}] ${a.headline}\n    ${a.description}\n    (source: ${a.source})`).join('\n\n');
-    const res = await client().messages.create({
+    const res = await trackedCreate({
+      agent: 'brief', runId,
       model: MODEL,
       max_tokens: 1200,
       system: `You are a personal morning-brief editor. The reader cares about: ${interests.join(', ') || 'technology, career'}. For each article you're given, write a tight 2–3 sentence digest in plain English — what happened and why it matters to someone with those interests. Also write a one-sentence TL;DR for the whole morning. Respond with ONLY JSON: {"summary": "the TL;DR", "items": [{"index": 0, "digest": "...", "topic": "which interest it maps to"}]}. Keep every article; preserve indices; no markdown.`,
@@ -111,7 +110,8 @@ async function condense(interests, articles) {
  */
 export async function runMorningBrief({ trigger = 'cron' } = {}) {
   const date = today();
-  const interests = learnInterests();
+  const interests = effectiveInterests();
+  const runId = startRun('brief', trigger);
   try {
     const { articles, reason } = await fetchNews(interests);
     if (reason === 'no NEWS_API_KEY') {
@@ -121,14 +121,17 @@ export async function runMorningBrief({ trigger = 'cron' } = {}) {
         items: [],
       });
       console.log(`[brief:${trigger}] skipped — no NEWS_API_KEY`);
+      finishRun(runId, { status: 'skipped', summary: 'no NEWS_API_KEY' });
       return brief;
     }
-    const { summary, items } = await condense(interests, articles);
+    const { summary, items } = await condense(interests, articles, runId);
     const brief = saveBrief({ brief_date: date, summary, items });
     console.log(`[brief:${trigger}] curated ${items.length} stories for: ${interests.join(', ') || '(no interests yet)'}`);
+    finishRun(runId, { status: 'ok', summary: `curated ${items.length} stories · interests: ${interests.join(', ') || 'none'}` });
     return brief;
   } catch (e) {
     console.error(`[brief:${trigger}] failed: ${e.message}`);
+    finishRun(runId, { status: 'error', error: e.message });
     return saveBrief({ brief_date: date, summary: `Couldn't build the brief today: ${e.message}`, items: [] });
   }
 }

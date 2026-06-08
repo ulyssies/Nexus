@@ -7,7 +7,7 @@
 //  gracefully with no API key (returns []), exactly like the job agent, so
 //  the journal still saves; tags simply stay empty until a key is set.
 // ============================================================
-import Anthropic from '@anthropic-ai/sdk';
+import { trackedCreate } from './claudeClient.js';
 
 const MODEL = 'claude-sonnet-4-6'; // light classification — Sonnet, not Opus
 const clean = (s) => String(s).trim().toLowerCase().replace(/^#+/, '').replace(/\s+/g, ' ').trim();
@@ -16,16 +16,16 @@ const clean = (s) => String(s).trim().toLowerCase().replace(/^#+/, '').replace(/
  * Extract tags for a note. `existingTags` biases the model toward reuse.
  * Returns { tags: string[], skipped?: bool, error?: string } — never throws.
  */
-export async function tagNote({ body, title = '' }, existingTags = []) {
+export async function tagNote({ body, title = '' }, existingTags = [], { runId = null } = {}) {
   if (!process.env.ANTHROPIC_API_KEY) return { tags: [], skipped: true };
   const text = `${title ? title + '\n' : ''}${body}`.slice(0, 6000);
 
   try {
-    const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     const existing = existingTags.length
       ? `\n\nExisting tags in the user's second brain (REUSE these when they fit, only invent a new one when none apply):\n${existingTags.join(', ')}`
       : '';
-    const response = await client.messages.create({
+    const response = await trackedCreate({
+      agent: 'tag', runId,
       model: MODEL,
       max_tokens: 200,
       messages: [{

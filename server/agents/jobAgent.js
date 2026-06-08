@@ -16,7 +16,7 @@
 //  declared dependency set.
 // ============================================================
 import fs from 'node:fs';
-import Anthropic from '@anthropic-ai/sdk';
+import { trackedCreate, startRun, finishRun } from './claudeClient.js';
 import nodemailer from 'nodemailer';
 import {
   TARGET_CITIES, JOB_TITLES, EXCLUDED_KEYWORDS, MAX_JOB_AGE_DAYS,
@@ -172,7 +172,7 @@ For each job return ONLY a valid JSON array. No markdown, no explanation. Each o
 
 JSON array:`;
 
-async function scoreGroup(client, jobs, originalIndices, resume, label, log) {
+async function scoreGroup(jobs, originalIndices, resume, label, log, runId) {
   const allScores = [];
   for (let i = 0; i < jobs.length; i += SCORE_BATCH_SIZE) {
     const batch = jobs.slice(i, i + SCORE_BATCH_SIZE);
@@ -188,7 +188,8 @@ async function scoreGroup(client, jobs, originalIndices, resume, label, log) {
       .join('\n\n---\n\n');
 
     try {
-      const response = await client.messages.create({
+      const response = await trackedCreate({
+        agent: 'job', runId,
         model: SCORING_MODEL,
         max_tokens: 4000,
         messages: [{
@@ -211,8 +212,7 @@ async function scoreGroup(client, jobs, originalIndices, resume, label, log) {
 }
 
 /** Step 3 — split DA/SWE, score each batch against its résumé. */
-export async function scoreJobs(jobs, { log = () => {} } = {}) {
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+export async function scoreJobs(jobs, { log = () => {}, runId = null } = {}) {
   const daResume = fs.readFileSync(RESUME_PATHS.da, 'utf-8');
   const sweResume = fs.readFileSync(RESUME_PATHS.swe, 'utf-8');
 
@@ -223,8 +223,8 @@ export async function scoreJobs(jobs, { log = () => {} } = {}) {
     g.jobs.push(job); g.indices.push(i);
   });
 
-  const daScores = da.jobs.length ? await scoreGroup(client, da.jobs, da.indices, daResume, 'DA', log) : [];
-  const sweScores = swe.jobs.length ? await scoreGroup(client, swe.jobs, swe.indices, sweResume, 'SWE', log) : [];
+  const daScores = da.jobs.length ? await scoreGroup(da.jobs, da.indices, daResume, 'DA', log, runId) : [];
+  const sweScores = swe.jobs.length ? await scoreGroup(swe.jobs, swe.indices, sweResume, 'SWE', log, runId) : [];
   return [...daScores, ...sweScores];
 }
 
@@ -317,6 +317,7 @@ export async function runJobAgent({ trigger = 'manual', cities, titles, skipEmai
   state = { running: true, step: 'starting', startedAt: new Date().toISOString(), finishedAt: null, summary: null, error: null, trigger };
   const t0 = Date.now();
   console.log(`\n[job-agent] run start (${trigger})`);
+  const runId = startRun('job', trigger);
 
   try {
     log('fetching listings');
@@ -327,7 +328,7 @@ export async function runJobAgent({ trigger = 'manual', cities, titles, skipEmai
     let matched = [];
     if (jobs.length) {
       log('scoring matches');
-      const scores = await scoreJobs(jobs, { log });
+      const scores = await scoreJobs(jobs, { log, runId });
       const scored = scores.map((s) => ({ score: s, job: jobs[s.globalIndex] })).filter((r) => r.job);
 
       log('saving to database');
@@ -352,9 +353,11 @@ export async function runJobAgent({ trigger = 'manual', cities, titles, skipEmai
     };
     state = { running: false, step: 'done', startedAt: state.startedAt, finishedAt: new Date().toISOString(), summary, error: null, trigger };
     console.log(`[job-agent] done in ${summary.elapsedSec}s — ${summary.written} written, ${summary.matches} matches`);
+    finishRun(runId, { status: 'ok', summary: `${summary.written} written · ${summary.matches} matches · ${summary.scanned} scanned` });
     return summary;
   } catch (err) {
     console.error(`[job-agent] FAILED (${trigger}): ${err.message}`);
+    finishRun(runId, { status: 'error', error: err.message });
     state = { running: false, step: 'error', startedAt: state.startedAt, finishedAt: new Date().toISOString(), summary: null, error: err.message, trigger };
     throw err;
   }
