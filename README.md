@@ -1,125 +1,109 @@
 # Nexus
 
-*A local-first personal AI operating system — six specialized agents that share one memory.*
+*A local-first personal AI operating system — specialized agents that share one memory.*
 
-> **Nexus runs entirely on your machine.** Six specialized AI agents share one brain — a single SQLite file holding your notes, goals, journal, jobs, inbox, and projects — so each agent can act on what the others know. An interview email doesn't just get flagged; it moves your job application to "interviewing." A commit doesn't just get logged; it becomes a node in your knowledge graph.
+> **Nexus runs entirely on your machine.** A set of AI agents share one brain — a single SQLite file holding your notes, goals, journal, jobs, inbox, and projects — so each agent acts on what the others know. An interview email doesn't just get flagged; it moves your job application to "interviewing." A commit doesn't just get logged; it becomes a node in your knowledge graph.
 
 The shared context **is** the product. Most AI assistants are a handful of disconnected chatbots; Nexus is a set of agents reading and writing the same memory.
 
-### What it does for you
+### What it does
 
-- **Command center** — one home dashboard with live stats, every agent's status, and a merged activity feed across all of them.
+- **Command center** — one home dashboard: live stats, every agent's status, and a merged activity feed.
 - **Job matching** — pulls live listings and ranks them against your résumé with Claude.
 - **Inbox triage** (read-only) — flags what's urgent, pulls deadlines onto your calendar, and updates job statuses when a recruiter writes back.
-- **Second brain** — journal entries, notes, and research are auto-tagged and linked into a force-graph; shared tags become the edges, and an optional hierarchy (concepts → children) adds directional structure.
-- **Research agent** — a chat-based research interface; explore a topic (paste articles, fetch URLs, ask questions), then distill the whole session into one permanent structured knowledge node.
-- **Council of 5** — five AI personas debate your decisions and rants, challenge each other, and land on a consensus.
-- **Accountability** — tracks goals, maintains streaks, and sends a nightly streak-aware nudge.
-- **Morning brief** — learns your interests from your own notes (and tags you set) and curates a short daily news read.
+- **Second brain** — journal, notes, and research are auto-tagged into a force-graph (shared tags = edges), with an optional concept hierarchy on top.
+- **Research agent** — chat through a topic (paste articles, fetch URLs, ask questions), then distill the session into one permanent knowledge node.
+- **Council of 5** — five AI personas debate your decisions, challenge each other, and land on a consensus.
+- **Accountability** — tracks goals, keeps streaks, sends a nightly streak-aware nudge.
+- **Morning brief** — curates a short daily news read from topics you pick and interests it learns from your notes.
 - **Project archivist** — watches your repos and turns commits into plain-English memory and graph nodes.
-- **Observability & cost** — every agent run and every Claude call is instrumented; a Settings panel shows per-agent run history, surfaced errors, next scheduled run, and estimated spend per agent and per day.
+- **Observability** — every agent run and Claude call is instrumented; a Settings panel shows run history, errors, next run, and estimated spend.
 
 **Local-only by design.** Nexus runs on `localhost`, is never exposed publicly, and ships as a repo you clone and point at your own API keys. Filesystem and inbox access are exactly why it stays on your machine.
 
-**Status:** Phases 1–7 complete — all six agents are built and running on schedule, with a cross-agent command center on top. Gmail and NewsAPI are wired in, and each agent degrades gracefully without its key. See [Roadmap](#roadmap).
-
 ## The dashboard, screen by screen
 
-Nexus is one SPA with a left rail of tabs. Each tab is a window onto one or more agents writing to the shared `nexus.db` — so what you see in one screen is often the product of another agent's work. Here is every screen and what runs behind it.
+One SPA with a left rail of tabs. Each tab is a window onto one or more agents writing to the shared `nexus.db` — so what you see in one screen is often the product of another agent's work.
 
-> The screenshots below use seeded demo data (fictional companies, generic journal entries) — not real personal data.
+> Screenshots use a mix of seeded demo data and live public job listings — not personal data.
 
 ### Home — the command center
 
-The first screen you open every day, built to answer three questions without a single click: *what happened while I was away, what do I need to do today, and what is the system telling me.* It reads from one `/api/home` endpoint that aggregates across **every** agent's table in one shot, laid out in five zones:
-
-- **Zone 1 — Alert strip.** A single horizontal strip of only the time-sensitive, *actionable* items pulled from across the agents — calendar events and email deadlines within 7 days, goals due for check-in today, urgent emails. Not counts, the actual items ("Discover payment in 6 days · Gym check-in due today · 2 urgent emails"). Hidden entirely when nothing is urgent.
-- **Zone 2 — Today's agenda.** Goals (each with today's check-in status — done / due / missed — and a one-click **check in** button that marks it done without leaving the page), a **compact month-grid calendar widget** (marks today, shows source-colored event chips per day, click a day for a popover of its events with time and source, prev/next month arrows — reading the same calendar the Calendar tab uses, without navigating away), and any job deadlines within the week.
-- **Zone 3 — Morning brief digest.** Not a list of headlines and not literary fluff — a Claude-written digest of **4–6 short, topic-labeled sentences** (**AI & Engineering**, **Career**, **Learning**), one concrete, actionable line per relevant story, scannable in about 20 seconds; stories that don't map to those interests are skipped. It's generated from what the brief agent already curated, cached in the DB with a timestamp, and only re-synthesized when stale (>6h) or you hit refresh; the curated articles collapse under a **read more** toggle. If no brief has run today, a **generate brief** button stands in.
-- **Zone 4 — Agent feed.** A full, scrollable, reverse-chronological stream of what every agent has done. A filter bar (all / jobs / email / accountability / brief / archivist) narrows it, and the archivist's commit stream — which dominates and is least actionable — collapses behind a "show N project updates" toggle by default.
-- **Zone 5 — Agent health row.** Six cards, one per agent, each with a status dot (active / idle / needs-attention from the observability layer), last run, next scheduled run, and one real insight line ("893 tracked · 3 new since yesterday", "2 urgent · Discover payment Jun 14", "Gym due today · best streak 1"). Click a card to jump to that agent's view.
+The first screen you open each day, answering *what happened while I was away, what do I need to do today, and what is the system telling me* — from one `/api/home` call that aggregates across every agent, in five zones: an **alert strip** of only the time-sensitive items, **today's agenda** (goals with one-click check-in + a month-grid calendar widget), the **morning-brief digest** (4–6 topic-labeled sentences), a filterable **agent feed**, and an **agent health row** (status dot, last/next run, one insight line per agent).
 
 ![Home — the command center](docs/screenshots/home.png)
 
 ### Job board — the job agent
 
-Live listings fetched from Adzuna / The Muse / Jobicy, scored 0–100 against your `.tex` résumés by Claude, and rendered from SQLite. Two subtabs split the board: **Found by agent** (everything scored) and **Live applications** (a tracker of the ones you're pursuing). A combinable filter bar covers track (DA/SWE), level (entry/mid/senior), status, city, and a match-score floor (70/80/85%+), with sort by newest, match score, or company; companies with 5+ listings collapse into one expandable row, and results paginate 50 at a time. Click any row to open an **inline detail panel** — an AI-written role summary, key responsibilities, how it aligns with your strengths, honest positives/negatives, missing skills, an estimated salary, the posting date, and a link to the listing. Mark a role **Applied** (or set any status: interested / interviewing / offer / rejected / withdrawn / archived) right from the panel or tracker. The **run now** button triggers the whole fetch → score → save pipeline on demand (it also runs on a 3-day cron, and the backend re-runs it on boot if the last scan is over 72h old). Untouched listings older than 30 days are auto-retired, while anything you've applied to or touched is kept forever; a separate lifetime "seen" count survives the cleanup. **Cross-agent:** the email agent writes back here — when a recruiter emails, a row's status flips to `interviewing` without you touching it.
+Live listings from Adzuna / The Muse / Jobicy, scored 0–100 against your `.tex` résumés by Claude. Three subtabs:
+
+- **Found by agent** — scored listings, newest-posted first, with a **new-this-scan** badge and a **★ Shortlist** of roles you've flagged *Interested*.
+- **Live applications** — a status pipeline (applied → interviewing → offer) for what you're actively pursuing.
+- **Inactive applications** — rejected / withdrawn / archived, plus **ghosted** (applied with no reply in 30 days).
+
+Filter by track / level / status / city / match floor; sort by newest, match, or company (company folders appear only when sorting by company). Click any row for an inline panel: the listing description, why it's a fit (or not), missing skills, salary, posted date, and a link. **run now** triggers fetch → score → save on demand. **Cross-agent:** the email agent writes here — a recruiter's email flips a row to `interviewing`, and a job you applied to on LinkedIn gets created here straight from its confirmation email.
 
 ![Job board](docs/screenshots/job-board.png)
 
 ### Second brain — the knowledge graph
 
-Every note (journal entry, research node, or an archivist's commit summary) is a **node**; any two notes that share a tag get an **edge**. The result is a force-directed graph (`react-force-graph-2d`) you can pan, zoom, and click to preview a node. Untagged notes show dim; well-connected themes cluster. On top of that flat, associative web sits an optional **hierarchy**: *concept* nodes are organizational anchors ("Interview Prep", "Projects") and any note can be filed under one, creating **directed parent→child edges** (drawn with arrows) that are distinct from the undirected tag edges. The flat layer is pure Zettelkasten; the hierarchy makes it navigable. This is the "nervous system" the council and morning brief read from.
+Every note (journal entry, research node, or archivist commit summary) is a **node**; two notes that share a tag get an **edge** — a force-directed graph you can pan, zoom, and click. On top of that flat associative web sits an optional **hierarchy**: *concept* anchors with directed parent→child edges. This is the memory the council and morning brief read from.
 
 ![Second brain — the knowledge graph](docs/screenshots/graph.png)
 
 ### Research — chat that becomes knowledge
 
-A chat-based research interface. Open a session on a topic, then have a real conversation — **paste articles, fetch a URL, ask follow-ups, go down rabbit holes**. The raw conversation is ephemeral working memory. When you're done, hit **save session** and the agent reads the *entire* conversation and distills it into one permanent, structured knowledge node: a topic, a summary of what you learned, key concepts (which become its tags), conclusions, the **open questions** that came up but went unanswered (tracked over time), and the sources used. You can file the node under a concept on save, so it joins the hierarchy. This is the system's richest source of new nodes — and the foundation of the eventual "Ask Nexus anything" query layer over everything you've learned.
+Open a session and have a real conversation — paste articles, fetch URLs, ask follow-ups. The conversation is ephemeral; hit **save session** and the agent distills the whole thing into one structured node (topic, summary, key concepts as tags, conclusions, tracked open questions, sources). You can file it under a concept on save.
 
 ![Research — chat that distills into a knowledge node](docs/screenshots/research.png)
 
 ### Journal — free writing, auto-organized
 
-Write a free-form entry and save it. On save, the **tagging agent** reads the text and returns two to four topic tags, which immediately appear on the entry and wire it into the second-brain graph. Recent entries are listed alongside the editor. You are never asked to file or categorize anything — the structure forms itself.
+Write a free-form entry and save. The **tagging agent** reads it and returns two to four topic tags, wiring the entry into the graph. You never file or categorize anything — the structure forms itself.
 
 ![Journal](docs/screenshots/journal.png)
 
 ### Goals — what you're working toward
 
-Create goals with a cadence (daily or weekly) and an optional target and category. This tab now carries the old Accountability workflow too: each goal shows a **streak momentum bar** (current streak relative to your best), today's check-in controls (`done` / `partial` / `missed`), and the latest warm nudge from the accountability agent. Goals are read by two other agents: the **accountability agent** (for nudges and streak tracking) and the **morning brief** (your goal categories become news interests). Add a goal here and the Home snapshot lights up.
+Goals with a cadence (daily / weekly), each showing a streak momentum bar, today's check-in controls (`done` / `partial` / `missed`), and the latest nudge from the accountability agent. Goal categories also feed the morning brief's interests.
 
 ![Goals](docs/screenshots/goals.png)
 
 ### Calendar — email triage and deadlines (the email agent)
 
-The read-only **email agent** scans your Gmail inbox on a daily cron (and on demand via **scan inbox**), and this screen surfaces its work two ways:
-
-- **Upcoming** — calendar events, including deadlines the agent *extracted from your emails* ("Application due Friday" becomes an event traced back to the source message), color-coded by who created them (you / email / job agent).
-- **Inbox, triaged** — every scanned email tagged with an importance badge (`urgent` / `important` / `normal` / `noise`) and a category, plus a badge when the agent took a cross-agent action (for example `job → interviewing`).
-
-Importance, deadlines, and job-status inference are all classified by Claude in a single batched call per run. Scope stays `gmail.readonly` — Nexus **never** sends or deletes.
+The read-only **email agent** scans Gmail (on a cron and on demand) and surfaces it two ways: **Upcoming** events including deadlines it extracted from emails, and a **triaged inbox** where each message gets an importance badge, a category, and a badge when it took a cross-agent action. All classification is one batched Claude call per run. Scope stays `gmail.readonly` — Nexus **never** sends or deletes.
 
 ![Calendar — email triage and deadlines](docs/screenshots/calendar.png)
 
 ### Council of 5 — perspective on demand
 
-Ask about a decision, a situation, or just rant. Five personas — **Marcus** (the Stoic / control), **Lyra** (the Visionary / long arc), **Zeno** (Devil's Advocate / blind spots), **Aria** (the Empath / emotional truth), and **Rex** (the Pragmatist / next step) — answer in parallel, then each sees the others and responds again, declaring a stance (agrees / neutral / challenges). A cheap Haiku call scores overall consensus from 0 to 100, shown on a meter. The council reads your recent journal and active goals as cached context, so its advice is grounded in your actual life. Each session persists and replays on revisit.
+Ask about a decision or just rant. Five personas — **Marcus** (control), **Lyra** (long arc), **Zeno** (blind spots), **Aria** (emotional truth), **Rex** (next step) — answer in parallel, then each sees the others and declares a stance; a Haiku call scores consensus 0–100. They read your recent journal and goals as context, so advice is grounded in your actual life.
 
 ![Council of 5](docs/screenshots/council.png)
 
 ### Projects — the archivist
 
-Per-repo cards with an AI-written change log. The **project archivist** polls `git log` every 30 minutes (and watches each repo's `.git/logs/HEAD` for instant scans), summarizes each new commit with Claude into a `{summary, why, impact}` record, and — crucially — turns every change into a **tagged node in the second-brain graph**, so your project history connects to your journal themes by shared tags. Filesystem reach is sandboxed to the paths in `WATCHED_PROJECTS`; it touches nothing else.
+Per-repo cards with an AI-written change log. The **archivist** polls `git log` (and watches each repo's `.git/logs/HEAD`), summarizes each commit into `{summary, why, impact}`, and turns it into a **tagged second-brain node** — so project history connects to journal themes by shared tags. Filesystem reach is sandboxed to `WATCHED_PROJECTS`.
 
 ![Projects — the archivist](docs/screenshots/projects.png)
 
-### Behind the scenes — the tagging agent
+### Settings — observability, cost, and agent control
 
-Not a tab, but the connective tissue of the whole system. The **tagging agent** (`agents/tagAgent.js`) runs whenever a note is created — a journal entry on save, or an archivist commit summary. It is given the note text *and the list of tags already in your second brain*, and told to **reuse an existing tag whenever one fits** before inventing a new one. That reuse is what keeps the graph connected instead of fragmenting into one-off tags, and it is why a commit about the council feature can end up edge-connected to a journal entry about your career. It degrades gracefully with no API key — the note still saves, just untagged.
-
-### Settings — observability, cost, and agent steering
-
-Six agents run unattended on cron schedules, so the system needs to be observable. Every agent run and every Claude call is instrumented through a single wrapper, and this panel surfaces it:
-
-- **Per-agent run history** — when each agent last ran, the trigger (cron / manual / on-demand), success or failure, a one-line summary of what it did, and the **next scheduled run** (computed from each agent's cron expression).
-- **Cost tracking** — token usage is captured on every call and priced from published per-model rates, rolled up as **estimated spend per agent, today's total, and a daily trend**. A council question costs ~11 calls; now you can see exactly what each agent costs.
-- **Error log** — failed runs surface here with their message, so a silent 6am failure is no longer invisible.
-- **Agent steering** — clickable interest tags that direct the morning brief's news search (`world cup`, `AI research`, …) without editing any config file. The agent merges your picks with what it learns from your journal.
+Agents run unattended, so the system is built to be observed and steered from one panel: **per-agent run history** (last/next run, trigger, success, one-line summary), **cost tracking** (token spend per agent and per day), an **error log**, and direct **agent controls** — edit the job agent's search locations, search terms, and résumés (DA/SWE), and pick the morning brief's news topics — all without touching a config file.
 
 ![Settings — observability, cost, and agent steering](docs/screenshots/settings.png)
 
-> **Engineering note (the part a reviewer might care about):** the observability layer is a single instrumented Claude client (`agents/claudeClient.js`) that every agent routes through. It brackets each run in an `agent_runs` row and logs token counts + estimated cost to `agent_usage`, all best-effort so telemetry can never break an agent. A read-only `GET /api/observability` aggregates last/next run, errors, and cost rollups in one query. It's LLM cost-and-reliability telemetry for a fleet of scheduled agents — built the way you'd want production AI infrastructure to work, at personal scale.
+> Everything routes through one instrumented Claude client (`agents/claudeClient.js`): it brackets each run in an `agent_runs` row and logs tokens + estimated cost to `agent_usage`, best-effort so telemetry can never break an agent. `GET /api/observability` aggregates it in one query — LLM cost-and-reliability telemetry for a fleet of scheduled agents, at personal scale.
 
 ---
 
 ## Architecture
 
-Two processes on one machine, both local:
+Two local processes, one shared database:
 
-- **Frontend** — Vite + React 18 SPA on `http://localhost:5173`. A thin client that calls the backend's REST API; it never touches the database or external APIs directly.
-- **Backend** — a single long-running Express process on `http://localhost:3001`. Hosts the REST API, every agent, all schedulers (`node-cron`), and file watchers. This is the piece that runs 24/7.
-- **Database** — SQLite (`better-sqlite3`), one file at `server/db/nexus.db`. The shared context layer every agent reads and writes.
+- **Frontend** — Vite + React 18 SPA on `localhost:5173`. A thin client over the REST API; never touches the DB or external APIs directly.
+- **Backend** — one long-running Express process on `localhost:3001`. Hosts the API, every agent, all schedulers (`node-cron`), and file watchers. This runs 24/7.
+- **Database** — SQLite (`better-sqlite3`), one file at `server/db/nexus.db`. The shared context every agent reads and writes.
 
 ```
                           ┌──────────────────────────┐
@@ -131,100 +115,53 @@ Two processes on one machine, both local:
                           └──────────────────────────┘
 ```
 
-### How the agents work together (the whole point)
-
-Because every agent reads and writes the same `nexus.db`, work flows between them automatically:
-
-- **Email → Jobs.** A recruiter emails "let's schedule your interview" → the email agent matches the company to an application and flips `jobs.status` to `interviewing`. You never touch the board.
-- **Email → Calendar.** "Application due Friday" in an email → a deadline event appears on your calendar, traced back to the source email.
-- **Journal → Brief & Council.** Your journal tags ("career", "health") teach the morning brief what news to curate, and the council reads recent entries to ground its advice in what you're actually going through.
-- **Archivist → Second brain.** Each commit becomes a tagged graph node, so your project history connects to your journal themes by shared tags.
-- **Everything → Home.** The command-center dashboard aggregates all of it into one live cross-agent feed.
-
-The frontend never touches the DB or external APIs directly — every read and write goes through the Express backend, so the agents stay the single source of truth.
+**How the agents work together (the whole point).** Because every agent shares `nexus.db`, work flows between them: a recruiter email flips `jobs.status` to `interviewing`; "due Friday" in an email becomes a calendar event; your journal tags teach the brief what to curate and ground the council's advice; each commit becomes a tagged graph node; and the home dashboard aggregates all of it. The frontend never touches the DB directly — the agents stay the single source of truth.
 
 ---
 
 ## Prerequisites
 
-- **Node.js 18+** (the backend uses the global `fetch`; tested on Node 20/22/24).
-- **npm**.
-- An **Anthropic API key** (required for any agent that reasons).
-- Per-agent API keys as you enable each agent (see [Configuration](#configuration)).
-
----
+- **Node.js 18+** (the backend uses global `fetch`; tested on 20/22/24) and **npm**.
+- An **Anthropic API key** (required for any agent that reasons), plus per-agent keys as you enable each (see [Configuration](#configuration)).
 
 ## Install
 
-The repo is one project with the backend nested under `server/` — two `package.json` files.
+One project with the backend nested under `server/` — two `package.json` files.
 
 ```bash
-# from the repo root (the frontend)
-npm install
-
-# the backend
-cd server && npm install && cd ..
+npm install                       # frontend (repo root)
+cd server && npm install && cd .. # backend
 ```
-
----
 
 ## Configuration
 
-All secrets live in `server/.env` (gitignored — never commit it). Copy the example and fill it in:
-
-```bash
-cp server/.env.example server/.env
-```
-
-What each value is and how to get it:
+All secrets live in `server/.env` (gitignored). Copy the example and fill it in: `cp server/.env.example server/.env`.
 
 | Variable | Needed for | How to get it |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | **All agents** (required now) | [console.anthropic.com](https://console.anthropic.com) → API keys → Create key. Add billing. ~$10–15/mo for personal daily use with prompt caching. |
-| `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` | **Job agent** (required now) | [developer.adzuna.com](https://developer.adzuna.com) → register → free tier (250 req/day). The Muse + Jobicy need no key. |
-| `EMAIL_USER` + `EMAIL_APP_PASSWORD` + `EMAIL_RECIPIENT` | **Job report email** (optional — the run still works without it) | Gmail → [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) → generate a 16-char app password (requires 2FA). Used by Nodemailer to send the digest. |
-| **Gmail OAuth** (`credentials.json`) | Email agent (Phase 5) | Google Cloud Console → new project → enable Gmail API → OAuth consent screen (External, add yourself as a test user) → create **OAuth Desktop** credentials → download `credentials.json` into `server/`. Then run once: `cd server && npm run gmail:auth` → open the printed URL, approve, paste the code back (token caches to `server/gmail-token.json`). Scope stays `gmail.readonly` — the agent never sends or deletes. |
-| `NEWS_API_KEY` | Morning brief agent (Phase 5) | [newsapi.org](https://newsapi.org) free dev tier (or GNews/Currents). |
-| `WATCHED_PROJECTS` | Project archivist (Phase 6) | Absolute local folder paths in `server/config.js`, e.g. `[{ name, path, type }]`. Not a credential — disk paths the watcher reads. Sandboxed to these paths only. |
+| `ANTHROPIC_API_KEY` | **All agents** | [console.anthropic.com](https://console.anthropic.com) → API keys. ~$10–15/mo for personal use with prompt caching. |
+| `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` | **Job agent** | [developer.adzuna.com](https://developer.adzuna.com) → free tier (250 req/day). Muse + Jobicy need no key. |
+| `EMAIL_USER` + `EMAIL_APP_PASSWORD` + `EMAIL_RECIPIENT` | Job report email (optional) | Gmail [app password](https://myaccount.google.com/apppasswords) (requires 2FA). Used by Nodemailer. |
+| **Gmail OAuth** (`credentials.json`) | Email agent | Google Cloud → enable Gmail API → OAuth **Desktop** creds → `credentials.json` in `server/`. Then `cd server && npm run gmail:auth`. Scope stays `gmail.readonly`. |
+| `NEWS_API_KEY` | Morning brief | [newsapi.org](https://newsapi.org) free dev tier. |
+| `WATCHED_PROJECTS` | Archivist | Absolute local folder paths in `server/config.js`. Not a credential — sandboxed disk paths the watcher reads. |
 
-For Phase 2 (the Job board) you only need `ANTHROPIC_API_KEY` and the two `ADZUNA_*` keys; email is optional.
-
----
+For the Job board you only need `ANTHROPIC_API_KEY` and the two `ADZUNA_*` keys.
 
 ## Run
 
-Start both processes (two terminals). The backend must stay running for cron and watchers.
+Two terminals; the backend must stay running for cron and watchers.
 
 ```bash
-# terminal 1 — backend (port 3001)
-cd server && npm run dev      # or: npm start
-
-# terminal 2 — frontend (port 5173)
-npm run dev
+cd server && npm run dev   # backend, port 3001  (or: npm start)
+npm run dev                # frontend, port 5173
 ```
 
-Open **http://localhost:5173**. The Vite dev server proxies `/api` to the backend, so the browser talks to one origin.
+Open **http://localhost:5173** — Vite proxies `/api` to the backend.
 
-### Using the Job board
+**Job board & résumés.** Click **run now** to fetch → score → save on demand (scheduled automation is off by default; flip `JOB_AGENT_CRON_ENABLED` in `config.js` to re-enable). Search locations, search terms, and the `.tex` résumés (in `server/resumes/`, gitignored) are editable from **Settings → Job agent** or in `config.js`.
 
-- The board renders live from SQLite across two subtabs (**Found by agent** / **Live applications**), with combinable filters (track, level, status, city, match-score floor), sort (newest / match / company), company grouping for 5+ listings, and 50-per-page pagination.
-- Click a row to expand its **detail panel** (AI role summary, responsibilities, strength alignment, positives/negatives, missing skills, salary estimate, posted date, listing link). Use **Mark as Applied** or the status control to track an application; the email agent can also flip these statuses automatically.
-- **`↻ run now`** triggers the full pipeline on demand: fetch live listings (Adzuna/Jobicy/The Muse) → score against your résumé with Claude → write to SQLite → optional email digest. The button polls progress and the board refreshes when the run finishes.
-- The same pipeline runs automatically on a **`node-cron` schedule (`0 7 */3 * *`** — 07:00 every 3rd day), registered when the backend boots, **and on boot if the last scan is older than `JOB_AGENT_CATCHUP_HOURS` (72h)**. Each run also purges *untouched* listings older than 30 days — anything you've applied to or manually set is kept, and a lifetime "seen" count persists independently of the live board.
-
-### Résumés and search settings
-
-Search terms, target cities, scoring thresholds, the cron schedule, and résumé paths live in **`server/config.js`**. The scorer compares listings against the `.tex` résumés in `server/resumes/` (DA and SWE tracks) — **add your own there; they're gitignored so personal résumés never get committed.** Edit `config.js` to change what gets searched and which résumé scores each track.
-
-### Maintenance scripts (run from `server/`)
-
-```bash
-npm run purge:jobs                 # delete only untouched found jobs (status=new, no application) older than 30 days
-npm run purge:jobs -- --dry-run    # preview the purge
-npm run migrate:jobs /path/to/jobs.json   # one-time import of a legacy job-agent jobs.json
-npm run seed:brain                 # seed the second brain with a demo concept hierarchy + tagged nodes
-npm run seed:brain -- --reset      # clear prior seeds and re-seed (seeds are stamped source_agent='seed')
-```
+**Maintenance scripts** (run from `server/`): `npm run purge:jobs` (drop untouched listings >30d, `-- --dry-run` to preview), `npm run migrate:jobs /path/to/jobs.json` (one-time legacy import), `npm run seed:brain` (`-- --reset`).
 
 ---
 
@@ -232,37 +169,35 @@ npm run seed:brain -- --reset      # clear prior seeds and re-seed (seeds are st
 
 | Agent | Status | What it does |
 |---|---|---|
-| **Job agent** | Live (Phase 2) | Fetches + scores listings, writes to `jobs`, sends a 3-day email report. Runs on cron + the manual button. |
-| **Email agent** | Built (Phase 5) | Reads Gmail (read-only), classifies importance, extracts deadlines into the calendar, and auto-updates `jobs.status` by matching companies. Needs a one-time `npm run gmail:auth`; no-ops gracefully until then. |
-| **Council of 5** | Live (Phase 4) | Five personas (Marcus/Lyra/Zeno/Aria/Rex) answer in parallel, challenge each other, and a consensus score is computed. Reads journal + goals. Persona prompts are v1 to refine. |
-| **Accountability** | Built (Phase 5) | Tracks goals, maintains streaks (cache rebuilt from check-in history), and sends a nightly streak-aware nudge. Verified live. |
-| **Morning brief** | Built (Phase 5) | Learns your interests from the second brain (note tags + goals) and user-set steering tags, fetches NewsAPI, and condenses ~6 stories into a morning read. Needs a real `NEWS_API_KEY`. |
-| **Project archivist** | Built (Phase 6) | Watches your code dirs, summarizes each commit with Claude into `project_changes` + a tagged second-brain graph node. Sandboxed to `WATCHED_PROJECTS`. Verified on this repo. |
-| **Tagging agent** | Live (Phase 3) | Behind-the-scenes: auto-tags every new note, reusing existing tags so the graph stays connected. |
-| **Research agent** | Built (Phase 9) | Chat-based research sessions that distill into one structured second-brain node (summary, concepts, conclusions, tracked open questions, sources). Paste text, fetch URLs, or freeform Q&A. |
-| **Observability layer** | Built (Phase 8) | Not an agent but the plumbing around them: instruments every run + Claude call into `agent_runs`/`agent_usage`, exposed via `GET /api/observability` and the Settings panel (run history, errors, next run, cost per agent/day). |
+| **Job agent** | Live | Fetches + scores listings against your résumés, writes to `jobs`, tracks applications. Runs on the manual button (scheduled cron optional). |
+| **Email agent** | Live | Reads Gmail (read-only), classifies importance, extracts deadlines to the calendar, and updates/creates `jobs` applications by matching companies. One-time `npm run gmail:auth`. |
+| **Council of 5** | Live | Five personas answer in parallel, challenge each other, and a consensus score is computed. Reads journal + goals. |
+| **Accountability** | Live | Tracks goals, maintains streaks, sends a nightly streak-aware nudge. |
+| **Morning brief** | Live | Curates ~6–9 stories from your chosen news topics + interests learned from notes/goals. Needs `NEWS_API_KEY`. |
+| **Project archivist** | Live | Summarizes each commit into `project_changes` + a tagged second-brain node. Sandboxed to `WATCHED_PROJECTS`. |
+| **Tagging agent** | Live | Behind the scenes: auto-tags every new note, reusing existing tags so the graph stays connected. |
+| **Research agent** | Live | Chat sessions that distill into one structured second-brain node (summary, concepts, conclusions, open questions, sources). |
+| **Observability** | Live | The plumbing: instruments every run + Claude call into `agent_runs`/`agent_usage`, exposed via `GET /api/observability` and Settings. |
 
----
+Every agent degrades gracefully without its key — the app never crashes; the affected feature just no-ops with a clear status.
 
 ## Project structure
 
 ```
 nexus/                       # repo root = Vite + React frontend (port 5173)
 ├── master.html              # design source of truth (CSS variables + per-view markup)
-├── index.html · vite.config.js · package.json
 ├── src/
 │   ├── main.jsx · App.jsx · index.css · api.js
 │   └── views/               # one component per tab: Home, Jobs, Journal, Graph,
 │                            #   Council, Goals, Calendar, Research, Projects, Settings
 └── server/                  # nested Express package — agent host (port 3001)
-    ├── index.js             # Express app + node-cron registration for all 6 agents
-    ├── config.js            # agent settings: cities, search terms, résumés, schedules, WATCHED_PROJECTS
-    ├── resumes/             # .tex résumés the scorer compares against (gitignored)
+    ├── index.js             # Express app + node-cron registration
+    ├── config.js            # cities, search terms, résumés, schedules, WATCHED_PROJECTS
     ├── agents/              # jobAgent, emailAgent (+gmailAuth), councilAgent, accountabilityAgent,
-    │                        #   morningBriefAgent, archivistAgent, tagAgent
-    ├── db/                  # better-sqlite3 connection, schema.sql, one repo per domain, overviewRepo
-    ├── routes/              # jobs, notes, council, accountability, brief, email, calendar, overview
-    └── scripts/             # migrate-jobs, purge-stale-jobs, gmail-auth
+    │                        #   morningBriefAgent, archivistAgent, tagAgent, researchAgent, claudeClient
+    ├── db/                  # better-sqlite3 connection, schema.sql, one repo per domain
+    ├── routes/              # jobs, notes, council, accountability, brief, email, calendar, overview, settings, …
+    └── scripts/             # migrate-jobs, purge-stale-jobs, gmail-auth, seed-second-brain
 ```
 
 See [`CLAUDE.md`](./CLAUDE.md) for the full file-by-file tree and architecture notes.
@@ -271,56 +206,24 @@ See [`CLAUDE.md`](./CLAUDE.md) for the full file-by-file tree and architecture n
 
 ## Roadmap
 
-> **This is the worst version of Nexus it will ever be.** Phases 1–7 got the skeleton standing and every agent talking to the same brain. Everything from here is making it sharper, deeper, and more genuinely useful — and there's a *lot* of it. The plan below is a living document; expect it to grow.
+> **This is the worst version of Nexus it will ever be.** The skeleton stands and every agent talks to the same brain; everything from here is making it sharper.
 
-### Shipped (Phases 1–7)
+**Shipped** — scaffold + DB; job agent; journal + second brain (auto-tagging, force graph); Council of 5; email + accountability + morning brief (with cross-agent `jobs.status` flips); project archivist; home command center; observability & cost panel; research agent + hierarchical second brain.
 
-1. **Scaffold + DB** — frontend, server, SQLite schema, design ported.
-2. **Job agent** — pipeline absorbed, cron wired, run button, board live.
-3. **Journal + second brain** — journal with AI auto-tagging, notes in SQLite, force graph.
-4. **Council of 5** — personas, challenge pass, consensus meter (Sonnet 4.6; cost-first). Persona prompts are a grounded v1, still being tuned.
-5. **Email + accountability + morning brief** — Gmail read-only triage + cross-agent `jobs.status` flips, goals/streaks/nudge, interest-driven curation. Now authorized and live.
-6. **Project archivist** — git watcher, AI change summaries, tagged graph nodes. Verified on this repo.
-7. **Home command center** — a cross-agent overview dashboard (stats + agent status + merged activity feed).
-8. **Observability & cost (Phase 8)** — every agent run + Claude call instrumented (`agent_runs` / `agent_usage`); a Settings panel with run history, surfaced errors, next-run times, and estimated cost per agent + per day; plus UI **agent-steering** tags for the morning brief. Council voices tuned (sharper, more concise, journal-grounded).
-9. **Research agent + hierarchical second brain (Phase 9)** — chat research sessions that distill into one structured knowledge node (summary, concepts, conclusions, tracked open questions, sources); plus a hierarchy layer (concept anchors, `parent_id`, directed parent→child graph edges) on top of the flat tag graph. The tagging agent's flat logic is left untouched.
+**Next** —
+- **Ask Nexus anything**: a query layer across your whole second brain; first test suites per layer; a prompt-cache cost audit.
+- **Richer agents**: full calendar grid + recurring events; quantified goals + reminders; multi-source brief + TTS; email thread summaries + *draft* replies (never auto-send); résumé/cover-letter drafts; archivist file-save + release notes.
+- **Proactivity**: agents that learn your preferences, proactive cross-agent nudges, a weekly self-review, per-task model routing.
+- **New domains & reach**: finance / health / learning agents (same prompt + tables pattern); push notifications + responsive layout; one-command setup.
+- **Hardening**: encryption at rest, backup/restore, a migrations framework, indexing/virtualization at scale.
 
-### Where it's headed (Phases 10+)
-
-**Phase 8/9 (remaining).** First test suites per layer (repos / agents / routes); a prompt-cache cost audit; **"Ask Nexus anything"** — a query layer over the accumulated knowledge/research nodes that answers across your whole second brain; resurfacing tracked open questions in the morning brief.
-
-**Phase 10 — Richer agents.** Each existing agent has an obvious next gear.
-- **Calendar** — full month grid, two-way + recurring events, reminders.
-- **Accountability** — quantified goals (numeric targets, real % progress), habit reminders/notifications, an end-of-week review.
-- **Morning brief** — multiple sources with dedup, save-for-later, tunable length, and an audio/TTS read.
-- **Email** — thread summarization, *draft* reply suggestions (still never auto-send), richer status signals (offer vs. rejection nuance), per-sender rules.
-- **Job agent** — tailored-résumé and cover-letter drafts, application-autofill helpers, salary insights.
-- **Archivist** — the `file_save` change type, multi-repo dashboards, diff-level insight, and auto release notes.
-
-**Phase 11 — Proactivity & intelligence.** Stop waiting to be asked.
-- Agents that **learn your preferences** over time — which jobs you act on, which emails actually mattered, which advice you took.
-- Proactive cross-agent nudges ("you journaled about burnout three times this week — want the council?").
-- A daily/weekly **self-review** that reasons across everything and surfaces patterns you'd miss.
-- Smarter model routing (Haiku / Sonnet / Opus) chosen per task to balance quality and cost.
-
-**Phase 12 — New agents & reach.** Same shared-context pattern, new domains.
-- New agents: **finance/budget**, **health/fitness**, **learning/study** — each just a system prompt + a few tables.
-- Desktop/push **notifications** and a responsive layout for the phone.
-- **One-command setup** + packaging so anyone can clone and run it; optional voice input and a quick-capture hotkey.
-
-**Phase 13 — Hardening.** For when it's daily-driving real life.
-- Encryption at rest for the DB, secret hygiene, backup/restore.
-- A schema-migrations framework as the tables evolve.
-- Performance: indexing, pagination, and graph virtualization at scale.
-
-None of this is locked. The point of the shared-context architecture is that any of these slots in without rewiring the rest — so the order will follow whatever turns out to matter most in daily use.
+The shared-context architecture lets any of these slot in without rewiring the rest, so the order follows whatever matters most in daily use.
 
 ---
 
 ## Notes
 
-- **Local-only by design.** Never bind to a public interface. There is no deploy step — "running" means starting the two dev processes above.
+- **Local-only by design.** Never bind to a public interface. There's no deploy step — "running" means starting the two dev processes.
 - **Single user, no app auth.** The only OAuth is Gmail read-only, used solely to read your inbox.
 - **Don't commit** `server/.env`, `credentials.json`, or `server/db/nexus.db`.
-- Architecture and build conventions for AI coding tools live in [`CLAUDE.md`](./CLAUDE.md); the design system lives in `master.html` (ported into `src/index.css`).
-```
+- Architecture and conventions for AI coding tools live in [`CLAUDE.md`](./CLAUDE.md); the design system lives in `master.html` (ported into `src/index.css`).
