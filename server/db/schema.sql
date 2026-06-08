@@ -311,6 +311,47 @@ CREATE TABLE IF NOT EXISTS brief_interests (
 );
 
 -- ============================================================
+--  RESEARCH AGENT — a chat session is EPHEMERAL; the distilled node is
+--  PERMANENT. A session holds the running conversation (research_messages,
+--  incl. pasted/fetched sources); on save the agent condenses it into one
+--  structured knowledge node (a notes row, node_type='research') and links
+--  it back via research_sessions.note_id. Open questions are split out so
+--  they're trackable over time.
+-- ============================================================
+CREATE TABLE IF NOT EXISTS research_sessions (
+  id         INTEGER PRIMARY KEY,
+  topic      TEXT,                              -- set on start or inferred on save
+  status     TEXT NOT NULL DEFAULT 'active'
+               CHECK (status IN ('active','saved')),
+  note_id    INTEGER REFERENCES notes(id) ON DELETE SET NULL,  -- the saved knowledge node
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_research_sessions_status ON research_sessions(status);
+
+CREATE TABLE IF NOT EXISTS research_messages (
+  id         INTEGER PRIMARY KEY,
+  session_id INTEGER NOT NULL REFERENCES research_sessions(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL CHECK (role IN ('user','assistant','source')),
+  content    TEXT NOT NULL,
+  meta       TEXT,                              -- e.g. source URL/title (JSON)
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_research_messages_session ON research_messages(session_id);
+
+-- Open questions a research node surfaced but didn't answer — trackable; can
+-- be resolved later (and could seed future research sessions).
+CREATE TABLE IF NOT EXISTS research_open_questions (
+  id         INTEGER PRIMARY KEY,
+  note_id    INTEGER REFERENCES notes(id) ON DELETE CASCADE,   -- the research node
+  question   TEXT NOT NULL,
+  resolved   INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_open_questions_note ON research_open_questions(note_id);
+CREATE INDEX IF NOT EXISTS idx_open_questions_resolved ON research_open_questions(resolved);
+
+-- ============================================================
 --  updated_at touch triggers for the mutable tables
 -- ============================================================
 CREATE TRIGGER IF NOT EXISTS trg_notes_updated AFTER UPDATE ON notes

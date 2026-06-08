@@ -55,14 +55,50 @@ export const setNoteTags = db.transaction((noteId, names = []) => {
 
 // ── notes ───────────────────────────────────────────────────────────────────
 const insertNote = db.prepare(`
-  INSERT INTO notes (kind, title, body, source_agent) VALUES (@kind, @title, @body, @source_agent)`);
+  INSERT INTO notes (kind, title, body, source_agent, node_type, parent_id, is_concept)
+  VALUES (@kind, @title, @body, @source_agent, @node_type, @parent_id, @is_concept)`);
+
+// node_type is the second-brain taxonomy; default it from the legacy `kind`.
+const NODE_TYPE_FROM_KIND = { journal: 'journal', project: 'archivist', brief: 'brief', note: 'note' };
 const getNoteStmt = db.prepare('SELECT * FROM notes WHERE id = ?');
 const deleteNoteStmt = db.prepare('DELETE FROM notes WHERE id = ?');
 
-export function createNote({ title = null, body, kind = 'journal', source_agent = 'user' }) {
+export function createNote({ title = null, body, kind = 'journal', source_agent = 'user', node_type = null, parent_id = null, is_concept = 0 }) {
   if (!body || !String(body).trim()) throw new Error('Note body is required');
-  const info = insertNote.run({ kind, title, body: String(body).trim(), source_agent });
+  const info = insertNote.run({
+    kind, title, body: String(body).trim(), source_agent,
+    node_type: node_type || NODE_TYPE_FROM_KIND[kind] || 'note',
+    parent_id: parent_id || null,
+    is_concept: is_concept ? 1 : 0,
+  });
   return getNote(info.lastInsertRowid);
+}
+
+// ── hierarchy (Phase 9) — additive: directional parent→child structure on top
+// of the flat shared-tag graph. Concept nodes are pure organizational anchors. ─
+export function createConcept({ title, description = null, parent_id = null }) {
+  if (!title || !String(title).trim()) throw new Error('Concept title is required');
+  return createNote({
+    title: String(title).trim(),
+    body: description && String(description).trim() ? String(description).trim() : String(title).trim(),
+    kind: 'note', node_type: 'concept', is_concept: 1, parent_id, source_agent: 'user',
+  });
+}
+
+/** Re-parent a note (or detach with parentId=null). Guards against self/cycle. */
+export function setParent(noteId, parentId) {
+  if (parentId != null && Number(parentId) === Number(noteId)) throw new Error('a note cannot be its own parent');
+  if (parentId != null && !getNoteStmt.get(parentId)) throw new Error('parent not found');
+  db.prepare('UPDATE notes SET parent_id = ? WHERE id = ?').run(parentId || null, noteId);
+  return getNote(noteId);
+}
+
+/** Nodes eligible to be a parent — concepts first, then everything else. */
+export function listParents() {
+  return db.prepare(`
+    SELECT id, title, body, node_type, is_concept FROM notes
+     ORDER BY is_concept DESC, (node_type = 'concept') DESC, created_at DESC`).all()
+    .map((n) => ({ id: n.id, label: n.title || n.body.slice(0, 40), node_type: n.node_type, is_concept: !!n.is_concept }));
 }
 
 export function getNote(id) {
@@ -95,10 +131,15 @@ export function listNotes({ kind = null, limit = 100 } = {}) {
   return rows.map((r) => ({ ...r, tags: byNote.get(r.id) || [] }));
 }
 
-// ── graph: nodes = notes, edges = notes sharing a tag ─────────────────────────
-const NODE_COLOR = { journal: '#9d8cff', note: '#6ea8fe', project: '#7c6fe0', brief: '#f0a050' };
+// ── graph: nodes = notes; edges are TWO kinds ────────────────────────────────
+//   • tag edges (associative, undirected) — two notes sharing a tag. The flat
+//     Zettelkasten layer the tagging agent produces. Untouched by the hierarchy.
+//   • parent edges (directional, parent → child) — the Phase 9 hierarchy layer.
+//   The frontend renders the two differently (directed flag).
+// Color is keyed by node_type so research/concept nodes are visually distinct.
+const NODE_COLOR = { journal: '#9d8cff', note: '#6ea8fe', archivist: '#7c6fe0', brief: '#f0a050', research: '#4ecba8', concept: '#e0b050' };
 export function getGraph() {
-  const notes = db.prepare('SELECT id, kind, title, body, created_at FROM notes ORDER BY created_at DESC').all();
+  const notes = db.prepare('SELECT id, kind, node_type, parent_id, is_concept, title, body, created_at FROM notes ORDER BY created_at DESC').all();
   const tagRows = db.prepare(`
     SELECT nt.note_id, t.id AS tag_id, t.name, t.color FROM note_tags nt
     JOIN tags t ON t.id = nt.tag_id`).all();
@@ -111,21 +152,28 @@ export function getGraph() {
     if (!notesByTag.has(r.tag_id)) notesByTag.set(r.tag_id, []);
     notesByTag.get(r.tag_id).push(r.note_id);
   }
+  const ids = new Set(notes.map((n) => n.id));
 
   const nodes = notes.map((n) => {
     const tags = tagsByNote.get(n.id) || [];
+    const type = n.node_type || n.kind;
+    const concept = !!n.is_concept;
     return {
       id: n.id,
       kind: n.kind,
+      nodeType: type,
+      isConcept: concept,
+      parentId: n.parent_id || null,
       label: n.title || n.body.slice(0, 40),
       preview: n.body.slice(0, 160),
       tags: tags.map((t) => t.name),
-      color: tags.length ? NODE_COLOR[n.kind] || '#6ea8fe' : '#5a5a66', // untagged = dim
-      val: 1 + tags.length,
+      // concepts/parents are anchor-colored even without tags; leaves dim when untagged
+      color: concept ? '#e0b050' : (tags.length ? NODE_COLOR[type] || '#6ea8fe' : '#5a5a66'),
+      val: (concept ? 3 : 1) + tags.length + (notes.filter((c) => c.parent_id === n.id).length),
     };
   });
 
-  // edge between any two notes sharing a tag (deduped; carries the tag color)
+  // tag edges (undirected, associative)
   const seen = new Set();
   const links = [];
   for (const [tagId, noteIds] of notesByTag) {
@@ -133,11 +181,17 @@ export function getGraph() {
     for (let i = 0; i < noteIds.length; i++) {
       for (let j = i + 1; j < noteIds.length; j++) {
         const [a, b] = noteIds[i] < noteIds[j] ? [noteIds[i], noteIds[j]] : [noteIds[j], noteIds[i]];
-        const key = `${a}-${b}`;
+        const key = `t:${a}-${b}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        links.push({ source: a, target: b, color });
+        links.push({ source: a, target: b, color, kind: 'tag', directed: false });
       }
+    }
+  }
+  // parent edges (directional, hierarchy) — distinct color, drawn with an arrow
+  for (const n of notes) {
+    if (n.parent_id && ids.has(n.parent_id)) {
+      links.push({ source: n.parent_id, target: n.id, color: '#e0b050', kind: 'parent', directed: true });
     }
   }
   return { nodes, links };

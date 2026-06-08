@@ -65,8 +65,10 @@ export default function GraphView() {
               nodeColor={(n) => n.color}
               nodeVal={(n) => n.val}
               nodeRelSize={5}
-              linkColor={(l) => l.color || 'rgba(255,255,255,0.12)'}
-              linkWidth={1}
+              linkColor={(l) => l.directed ? (l.color || '#e0b050') : (l.color ? l.color + '55' : 'rgba(255,255,255,0.10)')}
+              linkWidth={(l) => l.directed ? 2 : 1}
+              linkDirectionalArrowLength={(l) => l.directed ? 4 : 0}
+              linkDirectionalArrowRelPos={1}
               onNodeClick={(n) => { setSelected(n); fgRef.current?.centerAt(n.x, n.y, 400); }}
               onEngineStop={() => fgRef.current?.zoomToFit(400, 50)}
             />
@@ -74,9 +76,12 @@ export default function GraphView() {
         )}
 
         <div className="graph-legend">
-          <div className="legend-row"><div className="legend-dot" style={{ background: '#9d8cff' }} />journal entries</div>
-          <div className="legend-row"><div className="legend-dot" style={{ background: '#6ea8fe' }} />notes</div>
+          <div className="legend-row"><div className="legend-dot" style={{ background: '#9d8cff' }} />journal</div>
+          <div className="legend-row"><div className="legend-dot" style={{ background: '#4ecba8' }} />research</div>
+          <div className="legend-row"><div className="legend-dot" style={{ background: '#7c6fe0' }} />project</div>
+          <div className="legend-row"><div className="legend-dot" style={{ background: '#e0b050' }} />concept / parent</div>
           <div className="legend-row"><div className="legend-dot" style={{ background: '#5a5a66' }} />untagged</div>
+          <div className="legend-row" style={{ marginTop: 4, color: 'var(--text-dim)' }}><span style={{ color: '#e0b050' }}>→</span>&nbsp;hierarchy edge · — tag edge</div>
         </div>
 
         <div className="graph-controls">

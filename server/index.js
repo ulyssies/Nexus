@@ -15,6 +15,7 @@ import emailRouter from './routes/email.js';
 import calendarRouter from './routes/calendar.js';
 import overviewRouter from './routes/overview.js';
 import observabilityRouter from './routes/observability.js';
+import researchRouter from './routes/research.js';
 import { DB_PATH } from './db/index.js';
 import { runJobAgent } from './agents/jobAgent.js';
 import { runAccountability } from './agents/accountabilityAgent.js';
@@ -41,6 +42,7 @@ app.use('/api/email', emailRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/overview', overviewRouter);
 app.use('/api/observability', observabilityRouter);
+app.use('/api/research', researchRouter);
 
 app.listen(PORT, () => {
   console.log(`Nexus server on http://localhost:${PORT}  (db: ${DB_PATH})`);
