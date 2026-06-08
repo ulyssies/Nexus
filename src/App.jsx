@@ -4,7 +4,6 @@ import JournalView from './views/JournalView.jsx';
 import GraphView from './views/GraphView.jsx';
 import CouncilView from './views/CouncilView.jsx';
 import GoalsView from './views/GoalsView.jsx';
-import AccountabilityView from './views/AccountabilityView.jsx';
 import ProjectsView from './views/ProjectsView.jsx';
 import HomeView from './views/HomeView.jsx';
 import CalendarView from './views/CalendarView.jsx';
@@ -19,10 +18,10 @@ const VIEW_META = {
   graph: ['Second brain', '· knowledge graph'],
   research: ['Research', '· distill sessions into knowledge'],
   journal: ['Journal', '· 24 entries'],
-  goals: ['Goals', '· 6 active'],
+  goals: ['Goals & accountability', '· track + check in'],
   calendar: ['Calendar', '· june 2026'],
   council: ['Council of 5', '· ask for perspective'],
-  accountability: ['Accountability', '· daily check-in'],
+  accountability: ['Goals & accountability', '· track + check in'],
   projects: ['Projects', '· archivist active'],
   settings: ['Settings', '· agents, cost & steering'],
 };
@@ -45,7 +44,7 @@ const NAV = [
   { id: 'journal', tip: 'Journal', icon: (
     <svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 016.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z" /></svg>
   ) },
-  { id: 'goals', tip: 'Goals', icon: (
+  { id: 'goals', tip: 'Goals & accountability', dot: 'var(--acct)', icon: (
     <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></svg>
   ) },
   { id: 'calendar', tip: 'Calendar', icon: (
@@ -54,9 +53,6 @@ const NAV = [
   { divider: true },
   { id: 'council', tip: 'Council of 5', dot: 'var(--council)', icon: (
     <svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></svg>
-  ) },
-  { id: 'accountability', tip: 'Accountability', dot: 'var(--acct)', icon: (
-    <svg viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
   ) },
   { id: 'projects', tip: 'Projects', icon: (
     <svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" /></svg>
@@ -131,8 +127,7 @@ export default function App() {
             : view === 'graph' ? <GraphView />
             : view === 'research' ? <ResearchView />
             : view === 'council' ? <CouncilView />
-            : view === 'goals' ? <GoalsView />
-            : view === 'accountability' ? <AccountabilityView />
+            : (view === 'goals' || view === 'accountability') ? <GoalsView />
             : view === 'projects' ? <ProjectsView />
             : view === 'calendar' ? <CalendarView />
             : view === 'settings' ? <SettingsView />

@@ -41,6 +41,7 @@ export const api = {
     const qs = new URLSearchParams(params).toString();
     return get(`/notes${qs ? `?${qs}` : ''}`);
   },
+  note: (id) => get(`/notes/${id}`),
   createNote: (note) => post('/notes', note),
   setNoteTags: (id, tags) => put(`/notes/${id}/tags`, { tags }),
   noteGraph: () => get('/notes/graph'),
@@ -72,10 +73,14 @@ export const api = {
 
   // home overview (cross-agent: stats + agent status + activity feed)
   overview: () => get('/overview'),
+  // home command center: alerts + agenda + agent health + digest + full feed
+  home: () => get('/home'),
 
   // morning brief
   brief: (date) => get(`/brief${date ? `?date=${date}` : ''}`),
   runBrief: () => post('/brief/run'),
+  // home digest paragraph: cached, only re-calls Claude when stale (or force)
+  briefDigest: (force = false) => post(`/brief/digest${force ? '?force=1' : ''}`),
 
   // brief interest steering (Settings → direct the news agent)
   briefInterests: () => get('/brief/interests'),
@@ -100,6 +105,10 @@ export const api = {
   emailStatus: () => get('/email/status'),
   emailStats: () => get('/email/stats'),
   emailFlags: (importance) => get(`/email/flags${importance ? `?importance=${importance}` : ''}`),
+  emailInbox: ({ filter = 'all', page = 1, pageSize = 25 } = {}) =>
+    get(`/email/flags?filter=${encodeURIComponent(filter)}&page=${page}&pageSize=${pageSize}`),
+  emailCounts: () => get('/email/counts'),
+  emailInsights: () => get('/email/insights'),
   runEmail: () => post('/email/run'),
   calendar: (all = false) => get(`/calendar${all ? '?all=1' : ''}`),
   addCalendarEvent: (ev) => post('/calendar', ev),
