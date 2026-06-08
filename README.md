@@ -28,15 +28,18 @@ The shared context **is** the product. Most AI assistants are a handful of disco
 Nexus is one SPA with a left rail of tabs. Each tab is a window onto one or more agents writing to the shared `nexus.db` — so what you see in one screen is often the product of another agent's work. Here is every screen and what runs behind it.
 
 > The screenshots below use seeded demo data (fictional companies, generic journal entries) — not real personal data.
+>
+> **Animated demos:** short GIF walkthroughs of the highlighted tabs (Home, Job board, Second brain, Research) can be generated with `npm run record:demos` — see [`docs/gifs/`](docs/gifs/) for the one-time setup. They land at `docs/gifs/<tab>.gif`; swap the static screenshot below for the matching GIF once recorded.
 
 ### Home — the command center
 
-The morning digest, and the one screen that shows the whole system working together. It reads from a single `/api/overview` endpoint that aggregates across **every** agent's table in one shot:
+The first screen you open every day, built to answer three questions without a single click: *what happened while I was away, what do I need to do today, and what is the system telling me.* It reads from one `/api/home` endpoint that aggregates across **every** agent's table in one shot, laid out in five zones:
 
-- **Live stat cards** — strong job matches, urgent emails, your best active streak, upcoming deadlines. Each card links straight to its tab.
-- **Agents panel** — all six agents with a real-time status line (`12 listings tracked`, `7 triaged · 1 urgent`, `watching 1 repo · 3 changes`) and a health dot (active / idle / needs-attention). Click any row to jump to that agent's view.
-- **Agent feed** — a merged, reverse-chronological stream of what every agent has been doing: a brief curated, an email flagged, the council weighing in, the archivist recording commits. This is the cross-agent picture nothing else gives you.
-- **Morning brief** read and a **goals snapshot** with streak bars.
+- **Zone 1 — Alert strip.** A single horizontal strip of only the time-sensitive, *actionable* items pulled from across the agents — calendar events and email deadlines within 7 days, goals due for check-in today, urgent emails. Not counts, the actual items ("Discover payment in 6 days · Gym check-in due today · 2 urgent emails"). Hidden entirely when nothing is urgent.
+- **Zone 2 — Today's agenda.** Goals (each with today's check-in status — done / due / missed — and a one-click **check in** button that marks it done without leaving the page), a **compact month-grid calendar widget** (marks today, shows source-colored event chips per day, click a day for a popover of its events with time and source, prev/next month arrows — reading the same calendar the Calendar tab uses, without navigating away), and any job deadlines within the week.
+- **Zone 3 — Morning brief digest.** Not a list of headlines and not literary fluff — a Claude-written digest of **4–6 short, topic-labeled sentences** (**AI & Engineering**, **Career**, **Learning**), one concrete, actionable line per relevant story, scannable in about 20 seconds; stories that don't map to those interests are skipped. It's generated from what the brief agent already curated, cached in the DB with a timestamp, and only re-synthesized when stale (>6h) or you hit refresh; the curated articles collapse under a **read more** toggle. If no brief has run today, a **generate brief** button stands in.
+- **Zone 4 — Agent feed.** A full, scrollable, reverse-chronological stream of what every agent has done. A filter bar (all / jobs / email / accountability / brief / archivist) narrows it, and the archivist's commit stream — which dominates and is least actionable — collapses behind a "show N project updates" toggle by default.
+- **Zone 5 — Agent health row.** Six cards, one per agent, each with a status dot (active / idle / needs-attention from the observability layer), last run, next scheduled run, and one real insight line ("893 tracked · 3 new since yesterday", "2 urgent · Discover payment Jun 14", "Gym due today · best streak 1"). Click a card to jump to that agent's view.
 
 ![Home — the command center](docs/screenshots/home.png)
 
@@ -227,6 +230,8 @@ Search terms, target cities, scoring thresholds, the cron schedule, and résumé
 npm run purge:jobs                 # delete only untouched found jobs (status=new, no application) older than 30 days
 npm run purge:jobs -- --dry-run    # preview the purge
 npm run migrate:jobs /path/to/jobs.json   # one-time import of a legacy job-agent jobs.json
+npm run seed:brain                 # seed the second brain with a demo concept hierarchy + tagged nodes
+npm run seed:brain -- --reset      # clear prior seeds and re-seed (seeds are stamped source_agent='seed')
 ```
 
 ---
