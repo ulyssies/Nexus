@@ -937,13 +937,27 @@ html, body {
 .track-node.done { background: var(--job); border-color: var(--job); }
 .track-node.current { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 8px var(--accent); }
 .track-label { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); text-align: center; }
+/* Card fills the available frame; the list scrolls inside it (header stays put)
+   so the page itself doesn't grow with the application count. */
 .application-tracker-card {
-  min-height: 520px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.application-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
 }
 
+/* Title flexes + truncates; timeline and status are fixed so the row can never
+   overflow the frame horizontally. */
 .application-row {
   display: grid;
-  grid-template-columns: minmax(330px, 0.95fr) minmax(460px, 1.45fr) minmax(150px, 0.35fr);
+  grid-template-columns: minmax(0, 1fr) 300px 160px;
   gap: 16px;
   align-items: center;
   margin-bottom: 0;
@@ -1141,23 +1155,32 @@ html, body {
   color: var(--text-dim);
 }
 
-textarea.journal-input {
+/* Base field styling — applies to BOTH <input> and <textarea> so any
+   .journal-input in the app matches the dark theme (plain inputs were
+   inheriting the browser's white default before this). */
+.journal-input {
   width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border-dim);
   border-radius: 10px;
-  padding: 16px;
+  padding: 10px 12px;
   color: var(--text-primary);
   font-family: var(--font-ui);
   font-size: 14px;
-  line-height: 1.7;
-  resize: none;
-  min-height: 240px;
+  line-height: 1.5;
   outline: none;
   transition: border-color 0.15s;
 }
-textarea.journal-input:focus { border-color: var(--border-mid); }
-textarea.journal-input::placeholder { color: var(--text-dim); }
+.journal-input:focus { border-color: var(--border-mid); }
+.journal-input::placeholder { color: var(--text-dim); }
+
+/* The journal write-box (and any multi-line use) keeps its roomier sizing. */
+textarea.journal-input {
+  padding: 16px;
+  line-height: 1.7;
+  resize: none;
+  min-height: 240px;
+}
 
 .auto-tags {
   display: flex;
