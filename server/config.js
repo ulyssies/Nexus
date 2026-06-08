@@ -88,6 +88,9 @@ export const EXCLUDED_KEYWORDS = [
 
 // node-cron schedule: 07:00 every 3rd day. Registered on server boot.
 export const JOB_AGENT_CRON = '0 7 */3 * *';
+// Local-machine catch-up: when the server boots after sleep/offline time,
+// run the job agent if the last successful scan/import is older than this.
+export const JOB_AGENT_CATCHUP_HOURS = 72;
 
 // Accountability check-in: 20:00 daily. Refreshes streaks + builds the nudge.
 export const ACCOUNTABILITY_CRON = '0 20 * * *';

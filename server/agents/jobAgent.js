@@ -27,6 +27,26 @@ import db from '../db/index.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+function plainText(value = '') {
+  return String(value || '')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function jobDescription(value, max = 4000) {
+  const text = plainText(value);
+  return text.length > max ? text.slice(0, max).trim() : text;
+}
+
 // ── tiny fetch-JSON helper with timeout (replaces axios) ──────────────────
 async function getJson(url, params = {}, timeoutMs = 10000) {
   const qs = new URLSearchParams(params).toString();
@@ -51,7 +71,7 @@ async function fetchJobicy(title) {
       title: j.jobTitle || 'Unknown Title',
       company: j.companyName || 'Unknown Company',
       location: j.jobGeo || 'Remote',
-      description: (j.jobExcerpt || (j.jobDescription || '').replace(/<[^>]+>/g, '')).slice(0, 250),
+      description: jobDescription(j.jobDescription || j.jobExcerpt),
       applyLink: j.url || '#',
       postedAt: j.pubDate || null,
       salary: null,
@@ -85,7 +105,7 @@ async function fetchAdzuna(title, city, region = 'us') {
         title: j.title || 'Unknown Title',
         company: j.company?.display_name || 'Unknown Company',
         location: j.location?.display_name || 'Unknown',
-        description: (j.description || '').slice(0, 250),
+        description: jobDescription(j.description),
         applyLink: j.redirect_url || '#',
         postedAt: j.created || null,
         salary,
@@ -109,7 +129,7 @@ async function fetchTheMuse(title) {
         title: j.name || 'Unknown Title',
         company: j.company?.name || 'Unknown Company',
         location: j.locations?.map((l) => l.name).join(', ') || 'Remote',
-        description: (j.contents || '').replace(/<[^>]+>/g, '').slice(0, 250),
+        description: jobDescription(j.contents),
         applyLink: j.refs?.landing_page || '#',
         postedAt: j.publication_date || null,
         salary: null,
@@ -163,8 +183,13 @@ matchPercent must reflect BOTH. A strong skill match at an unrealistic seniority
 
 For each job return ONLY a valid JSON array. No markdown, no explanation. Each object must have:
 - "index": number (0-based index within this batch)
+- "roleSummary": 1-2 sentences describing the actual role and its purpose. Do not copy the company intro or opening boilerplate from the listing.
+- "responsibilities": array of 3-5 concrete responsibilities/duties the person would perform in this role. Infer from the job description when the listing is verbose or boilerplate-heavy.
 - "matchPercent": number 0-100 — combined skill + seniority fit as described above
 - "matchCategory": one of "Excellent" (85-100), "Strong" (70-84), "Good" (55-69), "Fair" (40-54), "Low" (below 40)
+- "alignedStrengths": array of 2-4 concrete candidate strengths from the resume that align with this role
+- "positives": array of 2-4 role positives/opportunities for this candidate
+- "negatives": array of 2-4 role negatives/risks/red flags for this candidate, including seniority or domain concerns
 - "missingSkills": array of 2-3 skill strings the candidate lacks
 - "reason": single sentence explaining the match, noting any seniority gap if present
 - "estimatedSalary": string (e.g. "$85,000 - $110,000"), or the real salary from the listing when provided. If listing salary exists, use that exact value.
@@ -191,7 +216,7 @@ async function scoreGroup(jobs, originalIndices, resume, label, log, runId) {
       const response = await trackedCreate({
         agent: 'job', runId,
         model: SCORING_MODEL,
-        max_tokens: 4000,
+        max_tokens: 8000,
         messages: [{
           role: 'user',
           content: [
@@ -246,6 +271,11 @@ export function saveScoredJobs(scored) {
     match_category: score.matchCategory || null,
     match_reasons: JSON.stringify({
       reason: score.reason || null,
+      roleSummary: score.roleSummary || null,
+      responsibilities: Array.isArray(score.responsibilities) ? score.responsibilities : [],
+      alignedStrengths: Array.isArray(score.alignedStrengths) ? score.alignedStrengths : [],
+      positives: Array.isArray(score.positives) ? score.positives : [],
+      negatives: Array.isArray(score.negatives) ? score.negatives : [],
       missingSkills: Array.isArray(score.missingSkills) ? score.missingSkills : [],
     }),
     entry_level_fit: score.entryLevelFit === true ? 1 : 0,

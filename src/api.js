@@ -25,7 +25,14 @@ export const api = {
     return get(`/jobs${qs ? `?${qs}` : ''}`);
   },
   jobStats: () => get('/jobs/stats'),
+  jobStatsFiltered: (params = {}) => {
+    const qs = new URLSearchParams(params).toString();
+    return get(`/jobs/stats${qs ? `?${qs}` : ''}`);
+  },
+  jobMeta: () => get('/jobs/meta'),
   jobApplications: () => get('/jobs/applications'),
+  markJobApplied: (id) => post(`/jobs/${id}/applied`),
+  setJobStatus: (id, status) => post(`/jobs/${id}/status`, { status }),
   runJob: () => post('/jobs/run'),         // kick off the pipeline (the "run now" button)
   jobRunStatus: () => get('/jobs/run/status'), // poll while a run is in flight
 

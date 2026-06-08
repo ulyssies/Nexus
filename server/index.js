@@ -16,14 +16,17 @@ import calendarRouter from './routes/calendar.js';
 import overviewRouter from './routes/overview.js';
 import observabilityRouter from './routes/observability.js';
 import researchRouter from './routes/research.js';
-import { DB_PATH } from './db/index.js';
+import db, { DB_PATH } from './db/index.js';
 import { runJobAgent } from './agents/jobAgent.js';
 import { runAccountability } from './agents/accountabilityAgent.js';
 import { runArchivist, startWatchers } from './agents/archivistAgent.js';
 import { runMorningBrief } from './agents/morningBriefAgent.js';
 import { runEmailAgent } from './agents/emailAgent.js';
 import { purgeStaleJobs } from './db/maintenance.js';
-import { JOB_AGENT_CRON, ACCOUNTABILITY_CRON, ARCHIVIST_CRON, BRIEF_CRON, EMAIL_CRON } from './config.js';
+import {
+  JOB_AGENT_CRON, JOB_AGENT_CATCHUP_HOURS, ACCOUNTABILITY_CRON,
+  ARCHIVIST_CRON, BRIEF_CRON, EMAIL_CRON,
+} from './config.js';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -44,6 +47,53 @@ app.use('/api/overview', overviewRouter);
 app.use('/api/observability', observabilityRouter);
 app.use('/api/research', researchRouter);
 
+function parseDbTime(value) {
+  if (!value) return null;
+  const normalized = String(value).includes('T') ? String(value) : `${String(value).replace(' ', 'T')}Z`;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function lastJobScanAt() {
+  const run = db.prepare(`
+    SELECT MAX(COALESCE(finished_at, started_at)) value
+      FROM agent_runs
+     WHERE agent = 'job'
+       AND (
+         status = 'ok'
+         OR (status = 'running' AND julianday('now') - julianday(started_at) < (2.0 / 24.0))
+       )
+  `).get()?.value;
+  const imported = db.prepare(`
+    SELECT MAX(created_at) value
+      FROM jobs
+  `).get()?.value;
+  return parseDbTime(run || imported);
+}
+
+async function runJobCatchupIfDue() {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    console.log('[boot] job catch-up skipped: ANTHROPIC_API_KEY is not set');
+    return;
+  }
+
+  const last = lastJobScanAt();
+  const ageHours = last ? (Date.now() - last.getTime()) / 36e5 : Infinity;
+  if (ageHours < JOB_AGENT_CATCHUP_HOURS) {
+    console.log(`[boot] job catch-up skipped: last scan ${ageHours.toFixed(1)}h ago`);
+    return;
+  }
+
+  console.log(`[boot] job catch-up due: last scan ${last ? `${ageHours.toFixed(1)}h ago` : 'never'}`);
+  try {
+    await runJobAgent({ trigger: 'boot' });
+    const { deleted } = purgeStaleJobs({ days: 30 });
+    if (deleted) console.log(`[boot] purged ${deleted} stale untouched jobs`);
+  } catch (e) {
+    console.error(`[boot] job catch-up failed: ${e.message}`);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`Nexus server on http://localhost:${PORT}  (db: ${DB_PATH})`);
 
@@ -60,6 +110,7 @@ app.listen(PORT, () => {
     }
   });
   console.log(`Job agent cron registered: "${JOB_AGENT_CRON}" (07:00 every 3rd day)`);
+  setTimeout(() => { runJobCatchupIfDue(); }, 5000);
 
   // Accountability: nightly streak refresh + check-in nudge. Pure local
   // (no external key needed); the nudge degrades to a template without one.

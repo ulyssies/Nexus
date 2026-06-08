@@ -36,9 +36,15 @@ export const normStatus = (s) =>
   STATUS_MAP[String(s || '').toLowerCase().trim()] || 'new';
 
 // Title-company dedup set, matching the external agent's fetch filter so a
-// re-run only fetches/scores listings we have not seen (keeps API cost down).
+// re-run only fetches/scores listings we have not seen. Rows that never got
+// a substantial description are intentionally fetchable again so a later provider
+// response can hydrate the board instead of leaving blank detail panels.
 export function getSeenJobKeys() {
-  const rows = db.prepare('SELECT title, company FROM jobs').all();
+  const rows = db.prepare(`
+    SELECT title, company
+      FROM jobs
+     WHERE length(trim(COALESCE(description, ''))) >= 400
+  `).all();
   return new Set(rows.map((r) => `${r.title}-${r.company}`.toLowerCase().replace(/\s+/g, '')));
 }
 
@@ -59,8 +65,12 @@ const upsertStmt = db.prepare(`
     location       = excluded.location,
     target_city    = excluded.target_city,
     url            = excluded.url,
-    description    = excluded.description,
-    salary         = excluded.salary,
+    description    = CASE
+                       WHEN length(trim(COALESCE(excluded.description, ''))) > length(trim(COALESCE(jobs.description, '')))
+                       THEN excluded.description
+                       ELSE jobs.description
+                     END,
+    salary         = COALESCE(NULLIF(excluded.salary, ''), jobs.salary),
     posted_at      = excluded.posted_at,
     match_score    = excluded.match_score,
     match_category = excluded.match_category,
@@ -72,6 +82,13 @@ const upsertStmt = db.prepare(`
     status_updated_at = CASE WHEN jobs.status = 'new' THEN excluded.status_updated_at ELSE jobs.status_updated_at END,
     status_updated_by = CASE WHEN jobs.status = 'new' THEN excluded.status_updated_by ELSE jobs.status_updated_by END,
     updated_at     = datetime('now')
+`);
+
+const touchSeenStmt = db.prepare(`
+  INSERT INTO job_seen_keys (source, external_id)
+  VALUES (@source, @external_id)
+  ON CONFLICT(source, external_id) DO UPDATE SET
+    last_seen_at = datetime('now')
 `);
 
 /**
@@ -91,6 +108,10 @@ export function upsertJob(record) {
 
 /** Upsert many rows in a single transaction. Returns the count written. */
 export const upsertJobs = db.transaction((records) => {
-  for (const r of records) upsertJob(r);
+  for (const r of records) {
+    const source = r.source || 'external';
+    if (r.external_id) touchSeenStmt.run({ source, external_id: r.external_id });
+    upsertJob(r);
+  }
   return records.length;
 });

@@ -96,6 +96,16 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status  ON jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_track   ON jobs(track);
 CREATE INDEX IF NOT EXISTS idx_jobs_entry   ON jobs(entry_level_fit);
 
+-- Lifetime set of provider listings Nexus has seen. Stale untouched rows can
+-- be deleted from jobs while this table preserves the historical count.
+CREATE TABLE IF NOT EXISTS job_seen_keys (
+  source        TEXT NOT NULL,
+  external_id   TEXT NOT NULL,
+  first_seen_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_seen_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (source, external_id)
+);
+
 -- ============================================================
 --  EMAIL FLAGS — owned by the email agent.
 --  related_job_id is the cross-agent link: when the agent infers an

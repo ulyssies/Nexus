@@ -39,4 +39,14 @@ db.exec(`UPDATE notes SET node_type = CASE kind
 db.prepare("CREATE INDEX IF NOT EXISTS idx_notes_parent ON notes(parent_id)").run();
 db.prepare("CREATE INDEX IF NOT EXISTS idx_notes_node_type ON notes(node_type)").run();
 
+// Seed lifetime job keys from any rows that predated the metric table. This
+// lets retention delete stale dashboard rows without losing "jobs seen" count.
+db.prepare(`
+  INSERT OR IGNORE INTO job_seen_keys (source, external_id, first_seen_at, last_seen_at)
+  SELECT source, external_id, COALESCE(created_at, datetime('now')), COALESCE(updated_at, created_at, datetime('now'))
+    FROM jobs
+   WHERE source IS NOT NULL
+     AND external_id IS NOT NULL
+`).run();
+
 export default db;
