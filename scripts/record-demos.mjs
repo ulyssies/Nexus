@@ -3,10 +3,8 @@
 //  README-highlighted tab, then ffmpeg converts it to a GIF in docs/gifs/.
 //
 //  This is dev-only tooling; it is NOT part of the app and pulls no runtime
-//  deps. Prerequisites (install once, locally — intentionally NOT in
-//  package.json dependencies so `npm install` stays lean):
+//  deps. Prerequisites (install once, locally):
 //
-//      npm i -D playwright
 //      npx playwright install chromium
 //      # plus ffmpeg on PATH  (macOS: brew install ffmpeg)
 //
