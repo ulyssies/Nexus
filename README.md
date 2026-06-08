@@ -42,7 +42,7 @@ The morning digest, and the one screen that shows the whole system working toget
 
 ### Job board — the job agent
 
-Live listings fetched from Adzuna / The Muse / Jobicy, scored 0–100 against your `.tex` résumés by Claude, and rendered from SQLite sorted by match. Filters for track (DA/SWE), entry-level fit, and application status. The **run now** button triggers the whole fetch → score → save pipeline on demand (and it also runs on a 3-day cron). Each listing carries its match reasons and missing skills. **Cross-agent:** the email agent writes back here — when a recruiter emails, a row's status flips to `interviewing` without you touching it.
+Live listings fetched from Adzuna / The Muse / Jobicy, scored 0–100 against your `.tex` résumés by Claude, and rendered from SQLite. Two subtabs split the board: **Found by agent** (everything scored) and **Live applications** (a tracker of the ones you're pursuing). A combinable filter bar covers track (DA/SWE), level (entry/mid/senior), status, city, and a match-score floor (70/80/85%+), with sort by newest, match score, or company; companies with 5+ listings collapse into one expandable row, and results paginate 50 at a time. Click any row to open an **inline detail panel** — an AI-written role summary, key responsibilities, how it aligns with your strengths, honest positives/negatives, missing skills, an estimated salary, the posting date, and a link to the listing. Mark a role **Applied** (or set any status: interested / interviewing / offer / rejected / withdrawn / archived) right from the panel or tracker. The **run now** button triggers the whole fetch → score → save pipeline on demand (it also runs on a 3-day cron, and the backend re-runs it on boot if the last scan is over 72h old). Untouched listings older than 30 days are auto-retired, while anything you've applied to or touched is kept forever; a separate lifetime "seen" count survives the cleanup. **Cross-agent:** the email agent writes back here — when a recruiter emails, a row's status flips to `interviewing` without you touching it.
 
 ![Job board](docs/screenshots/job-board.png)
 
@@ -212,9 +212,10 @@ Open **http://localhost:5173**. The Vite dev server proxies `/api` to the backen
 
 ### Using the Job board
 
-- The board renders live from SQLite, sorted by match score, with filters (all tracks / entry only / applied).
+- The board renders live from SQLite across two subtabs (**Found by agent** / **Live applications**), with combinable filters (track, level, status, city, match-score floor), sort (newest / match / company), company grouping for 5+ listings, and 50-per-page pagination.
+- Click a row to expand its **detail panel** (AI role summary, responsibilities, strength alignment, positives/negatives, missing skills, salary estimate, posted date, listing link). Use **Mark as Applied** or the status control to track an application; the email agent can also flip these statuses automatically.
 - **`↻ run now`** triggers the full pipeline on demand: fetch live listings (Adzuna/Jobicy/The Muse) → score against your résumé with Claude → write to SQLite → optional email digest. The button polls progress and the board refreshes when the run finishes.
-- The same pipeline runs automatically on a **`node-cron` schedule (`0 7 */3 * *`** — 07:00 every 3rd day), registered when the backend boots. Each scheduled run also purges unapplied listings older than 30 days.
+- The same pipeline runs automatically on a **`node-cron` schedule (`0 7 */3 * *`** — 07:00 every 3rd day), registered when the backend boots, **and on boot if the last scan is older than `JOB_AGENT_CATCHUP_HOURS` (72h)**. Each run also purges *untouched* listings older than 30 days — anything you've applied to or manually set is kept, and a lifetime "seen" count persists independently of the live board.
 
 ### Résumés and search settings
 
@@ -223,7 +224,7 @@ Search terms, target cities, scoring thresholds, the cron schedule, and résumé
 ### Maintenance scripts (run from `server/`)
 
 ```bash
-npm run purge:jobs                 # delete unapplied jobs older than 30 days
+npm run purge:jobs                 # delete only untouched found jobs (status=new, no application) older than 30 days
 npm run purge:jobs -- --dry-run    # preview the purge
 npm run migrate:jobs /path/to/jobs.json   # one-time import of a legacy job-agent jobs.json
 ```
