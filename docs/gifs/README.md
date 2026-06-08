@@ -1,21 +1,10 @@
-# Demo GIFs
+# Optional Demo GIFs
 
-Short animated walkthroughs of the README-highlighted tabs.
+This folder is reserved for future animated walkthroughs.
 
-The current README embeds committed GIFs for every active tab:
-
-- `home.gif`
-- `jobs.gif`
-- `graph.gif`
-- `research.gif`
-- `journal.gif`
-- `goals.gif`
-- `calendar.gif`
-- `council.gif`
-- `projects.gif`
-- `settings.gif`
-
-To regenerate richer browser recordings locally, use
+The main README currently uses full-screen PNG screenshots from
+[`docs/screenshots/`](../screenshots/) because the first GIF pass was too busy
+for a clean project overview. To record calmer manual GIFs later, use
 [`scripts/record-demos.mjs`](../../scripts/record-demos.mjs) (Playwright → ffmpeg):
 
 ```bash
@@ -28,5 +17,5 @@ npm run record:demos            # records home.gif, jobs.gif, graph.gif, researc
 npm run record:demos -- home    # just one tab
 ```
 
-Output lands here as `home.gif`, `jobs.gif`, `graph.gif`, and `research.gif`. Edit
-the per-tab `steps` in the script to change what each recorded clip demonstrates.
+Keep future clips stable: full-screen viewport, one tab at a time, and only one
+small workflow per clip, such as opening a Job Board detail panel.

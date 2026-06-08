@@ -31,9 +31,9 @@ Phases 1–9 are built and live. This session was a large **UI/UX overhaul** plu
 
 **Other:**
 - Second-brain seed: `server/scripts/seed-second-brain.js` (`npm run seed:brain`, `--reset`) — concept hierarchy + tagged child nodes for a healthy demo graph. The owner intends to wipe seeds (`source_agent='seed'`) once real notes accumulate.
-- Demo tooling: `scripts/record-demos.mjs` (`npm run record:demos`, Playwright→ffmpeg) for browser recordings, plus `scripts/shoot-screenshots.mjs` for refreshed tab screenshots.
-- README media refreshed: current tab GIFs now live in `docs/gifs/` and README embeds the active tabs (Home, Job board, Second brain, Research, Journal, Goals, Calendar, Council, Projects, Settings). The old standalone Accountability README section was removed because that workflow is merged into Goals.
-- `docs/screenshots/*.png` refreshed to the new UI.
+- Demo tooling: `scripts/record-demos.mjs` (`npm run record:demos`, Playwright→ffmpeg) for optional future browser recordings, plus `scripts/shoot-screenshots.mjs` for refreshed tab screenshots.
+- README media uses the current full-screen PNG screenshots for the active tabs (Home, Job board, Second brain, Research, Journal, Goals, Calendar, Council, Projects, Settings). The first GIF pass was removed because the moving crops looked too busy; calmer GIFs should be recorded manually later if desired.
+- `docs/screenshots/*.png` refreshed to the new UI; `docs/gifs/` is reserved for future manual recordings.
 
 ## Verification
 
@@ -43,7 +43,7 @@ Phases 1–9 are built and live. This session was a large **UI/UX overhaul** plu
 
 ## ⚠️ Before pushing
 
-- **Audit README media for personal data before any public push.** The screenshots/GIFs are generated from the local dashboard, so they may include real inbox/calendar/goals/jobs even when the README copy says demo data.
+- **Audit README media for personal data before any public push.** The screenshots are generated from the local dashboard, so they may include real inbox/calendar/goals/jobs even when the README copy says demo data.
 - Run the standard secret/PII audit before any push (done for the code diff this session — clean).
 
 ## Suggested next steps
