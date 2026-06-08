@@ -129,6 +129,7 @@ nexus/                       # repo root = the Vite + React frontend (port 5173)
 │       ├── AccountabilityView.jsx  # streak cards + today's check-in (done/partial/missed) + AI nudge
 │       ├── CalendarView.jsx # upcoming events (user + email deadlines) + triaged inbox flags
 │       ├── ProjectsView.jsx # archivist: per-repo cards + AI change log + "scan now"
+│       ├── SettingsView.jsx # observability: cost cards + per-agent run/cost rows + daily trend + error log + brief interest-tag steering (gear nav)
 │       └── Placeholder.jsx  # stand-in for any remaining not-yet-built view
 └── server/                  # nested Express package — long-running agent host (port 3001)
     ├── package.json         # backend deps + scripts (migrate:jobs, purge:jobs, gmail:auth)
@@ -146,17 +147,19 @@ nexus/                       # repo root = the Vite + React frontend (port 5173)
     │   ├── morningBriefAgent.js    # learn interests → NewsAPI → Claude condense → daily brief
     │   ├── emailAgent.js    # read-only Gmail → batch classify → flags + deadlines + jobs.status flip
     │   ├── gmailAuth.js     # OAuth client + coded NO_CREDENTIALS/NEEDS_AUTH for graceful degradation
-    │   └── archivistAgent.js  # git log → Claude {summary,why,impact} → project_changes + tagged graph node; chokidar HEAD watch
+    │   ├── archivistAgent.js  # git log → Claude {summary,why,impact} → project_changes + tagged graph node; chokidar HEAD watch
+    │   └── claudeClient.js  # instrumented Anthropic wrapper EVERY agent routes through: trackedCreate logs tokens+cost to agent_usage; startRun/finishRun/withRun bracket agent_runs
     ├── db/
     │   ├── index.js         # better-sqlite3 connection; applies schema on open
     │   ├── schema.sql       # full shared-context schema (all tables)
     │   ├── jobsRepo.js      # shared jobs upsert + dedup helpers (agent + migration use it)
     │   ├── notesRepo.js     # notes/tags/note_tags CRUD + graph (nodes + shared-tag edges)
     │   ├── goalsRepo.js     # goals/checkins/streaks CRUD + recomputeStreak (cache from history)
-    │   ├── briefRepo.js     # morning_brief + items; learnInterests() from tags + goals
+    │   ├── briefRepo.js     # morning_brief + items; learnInterests() + brief_interests CRUD + effectiveInterests() (user steering tags + learned)
     │   ├── emailRepo.js     # email_flags + calendar_events; findJobByCompany + setJobStatus (cross-agent bridge)
     │   ├── projectChangesRepo.js  # project_changes upsert + mirrors each change into a graph note
     │   ├── overviewRepo.js  # home dashboard: cross-agent stats + per-agent status + merged activity feed
+    │   ├── observabilityRepo.js  # Settings: per-agent last/next run, errors, cost rollups (per agent/day) from agent_runs+agent_usage
     │   ├── maintenance.js   # purgeStaleJobs() retention sweep (called by the cron)
     │   └── nexus.db         # the SQLite file (gitignored)
     ├── routes/
@@ -167,7 +170,8 @@ nexus/                       # repo root = the Vite + React frontend (port 5173)
     │   ├── brief.js         # GET / (today's digest + interests), POST /run
     │   ├── email.js         # /status, /stats, /flags, POST /run
     │   ├── calendar.js      # GET / (upcoming, user+email events), POST / (user event)
-    │   └── overview.js      # GET / — one cross-agent snapshot for the home command center
+    │   ├── overview.js      # GET / — one cross-agent snapshot for the home command center
+    │   └── observability.js # GET / — agent run history, errors, next-run, cost rollups (Settings panel)
     └── scripts/
         ├── migrate-jobs.js  # one-time legacy jobs.json -> SQLite import (explicit path)
         ├── purge-stale-jobs.js  # delete unapplied jobs >30d old
@@ -179,7 +183,7 @@ nexus/                       # repo root = the Vite + React frontend (port 5173)
 ## Conventions
 
 - **Naming:** camelCase JS vars/functions, PascalCase React components, snake_case for SQL tables/columns.
-- **DB tables (all created in `server/db/schema.sql`):** `jobs`, `email_flags`, `calendar_events`, `goals`, `checkins`, `streaks`, `notes`, `tags`, `note_tags`, `morning_brief`, `morning_brief_items`, `project_changes`, `council_sessions`, `council_responses`. All are now written by their agents (every table has an owner; `email_flags`/`calendar_events` populate once Gmail is authorized).
+- **DB tables (all created in `server/db/schema.sql`):** `jobs`, `email_flags`, `calendar_events`, `goals`, `checkins`, `streaks`, `notes`, `tags`, `note_tags`, `morning_brief`, `morning_brief_items`, `project_changes`, `council_sessions`, `council_responses`, plus observability/steering: `agent_runs`, `agent_usage`, `brief_interests`. All are written by their agents (every table has an owner; `email_flags`/`calendar_events` populate once Gmail is authorized).
 - **Commits:** conventional commits (feat / fix / chore / docs) — confirm before relying on tooling that enforces it.
 - **Branches:** confirm with the project owner (not yet established).
 - **Error handling:** never swallow errors silently. Log with context — agents run unattended, so a silent failure is invisible.
@@ -218,8 +222,8 @@ nexus/                       # repo root = the Vite + React frontend (port 5173)
 5. **Phase 5 — Email + accountability + brief ✅ built:** ✅ Accountability (`goalsRepo.js` + `accountabilityAgent.js` + `routes/accountability.js` + Goals/Accountability views; streak cache from check-in history; nightly nudge; verified live). ✅ Morning brief (`briefRepo.js` + `morningBriefAgent.js` + `routes/brief.js` + `HomeView.jsx`; interests learned from the second brain; graceful w/o `NEWS_API_KEY`). ✅ Email (`emailRepo.js` + `gmailAuth.js` + `emailAgent.js` + `routes/email.js`/`calendar.js` + `CalendarView.jsx`; read-only Gmail, deadline→calendar, cross-agent `jobs.status` flip; coded graceful degradation). ⬜ owner to run `npm run gmail:auth` and set a real `NEWS_API_KEY` to go fully live; ⬜ tune nudge/triage prompts as used.
 6. **Phase 6 — Project archivist ✅ built:** `projectChangesRepo.js` + `archivistAgent.js` + `routes/projects.js` + `ProjectsView.jsx`. Git-log poll (30 min) + chokidar `.git/logs/HEAD` watch → Claude `{summary, why, impact}` → `project_changes` + auto-tagged `kind='project'` graph node. Sandboxed to `WATCHED_PROJECTS` (defaults to the Nexus repo). Verified live (7 commits → tagged nodes → 21 links; re-scan dedups). ⬜ owner adds their own repos to `WATCHED_PROJECTS`; optional `file_save` change_type later.
 7. **Home command center ✅ built:** `db/overviewRepo.js` + `routes/overview.js` (`GET /api/overview`) aggregate, in one read, live stat cards + per-agent status lines + a merged cross-agent activity feed (jobs/email/council/checkins/project_changes/brief). `HomeView.jsx` renders it as the dashboard (AGENTS panel + AGENT FEED + brief + goals snapshot; `onNavigate` jumps to any tab). Verified live in-browser against the real DB; topbar now reads "6 agents active".
-8. **Phase 8 — Refinement & trust:** tune every prompt against real use (council voices, email triage — promos shouldn't read `urgent` — nudge tone, archivist summaries); add agent observability (run history, last/next run, surfaced errors); cost tracking + prompt-cache audit; first test suites per layer.
-9. **Phase 9 — Deeper second brain:** note edit/delete/search + manual links; graph filter/cluster/timeline + tag merge/rename; an "ask Nexus anything" box that reasons across the whole DB (jobs+emails+notes+goals+commits).
+8. **Phase 8 — Observability & trust ✅ mostly done:** ✅ instrumented every agent run + Claude call (`agents/claudeClient.js` → `agent_runs`/`agent_usage`; `withRun`/`startRun`/`finishRun`; estimated cost from published per-model rates). ✅ `db/observabilityRepo.js` + `routes/observability.js` (`GET /api/observability`: per-agent last/next run, errors, cost per agent/day; next-run via `cron-parser`). ✅ `SettingsView.jsx` (gear) — cost cards, agent run/cost rows, daily trend, error log, + **brief interest-tag steering** (`brief_interests` table; `effectiveInterests()` merges user picks with learned). ✅ council voices tuned (concise, journal-grounded, Zeno bites). ⬜ remaining: first test suites per layer; prompt-cache cost audit; further triage/nudge tuning.
+9. **Phase 9 — Research agent + hierarchical second brain (NEXT — build now):** Build the **research agent** end-to-end first (repo → agent → routes → cron → React view): a chat-based research session (paste article / URL fetch / freeform Q&A / lecture dump / project session); the raw conversation is ephemeral, and on **save session** the agent condenses it into ONE permanent structured knowledge node (topic, summary, key concepts+tags, conclusions, **open questions**, sources, connected nodes) saved to the second brain. THEN layer in the **hierarchy** additively: `notes.parent_id` (nullable FK→notes.id), `notes.node_type` (journal/research/concept/archivist), `notes.is_concept`; a `directed` flag on graph links so the frontend renders parent→child edges differently from shared-tag edges. Three node levels: parent (org anchor, no content) → concept (middle) → leaf (content). **Do NOT change the tagging agent's flat shared-tag logic — hierarchy is additive.** Foundation for the eventual "Ask Nexus anything" query layer.
 10. **Phase 10 — Richer agents:** calendar month grid + two-way/recurring; quantified goals + reminders + weekly review; brief multi-source + save-for-later + TTS; email thread summaries + draft-reply *suggestions* (never auto-send) + per-sender rules; job-agent résumé/cover-letter drafts; archivist `file_save` + multi-repo + release notes.
 11. **Phase 11 — Proactivity & intelligence:** agents learn preferences over time; proactive cross-agent nudges; daily/weekly self-review across everything; per-task model routing (Haiku/Sonnet/Opus).
 12. **Phase 12 — New agents & reach:** finance/health/learning agents (same prompt+tables pattern); desktop/push notifications + responsive layout; one-command setup/packaging.
@@ -234,7 +238,7 @@ nexus/                       # repo root = the Vite + React frontend (port 5173)
 - All AI features need `ANTHROPIC_API_KEY` in `server/.env` (+ `ADZUNA_*` for live job fetch). Without a key, every agent degrades gracefully: `POST /api/jobs/run` → clear 400; notes save untagged; `POST /api/council/ask` → clear 400. Nothing crashes. The key is now present and **the job pipeline (scoped live run), auto-tagging, and the council have all been verified end-to-end against the real API.**
 - A full job run is slow (Adzuna queried per city × title with throttling), so it runs in the background; the UI polls `GET /api/jobs/run/status`. The scoped verification used 1 city × 2 titles.
 - The email digest was rebuilt against the Nexus `jobs` schema (status-based), not the external agent's separate `applications` table — simpler, but less detailed than the original report.
-- **Council persona prompts in `agents/councilAgent.js` are placeholder starter text** — the pipeline runs, but the voices are generic until refined (Zeno especially). A council question costs ~11 calls (5+5 Sonnet + 1 Haiku consensus).
+- **Council persona prompts in `agents/councilAgent.js` are a tuned v2** — the charter now mandates concision (3–5 sentences) and grounding each reply in the owner's journal/goals; each voice is more distinct and Zeno genuinely challenges. Iterate further as used. A council question costs ~11 calls (5+5 Sonnet + 1 Haiku consensus), now visible in the Settings cost panel.
 - Pass-2 stance is parsed from a `STANCE:` first line (not JSON) — robust against free-text quotes/braces, which an earlier JSON format broke on.
 - **Email agent is now authorized and live.** `server/credentials.json` + `server/gmail-token.json` (both gitignored) are present; a real inbox scan triaged 20 messages, extracted 1 deadline→calendar, and the cross-agent `jobs.status` flip path is verified. Scope is `gmail.readonly` — never sends/deletes. If the token is ever missing it degrades with a coded status (`NO_CREDENTIALS`/`NEEDS_AUTH`); re-run `npm run gmail:auth`. Minor tuning opportunity: marketplace "special offer" promos can over-classify as `urgent` — adjust the triage prompt in `emailAgent.js` if it annoys.
 - **Morning brief is now live.** A real `NEWS_API_KEY` is set; a run curated 6 real stories (Claude-condensed, topic-mapped to interests learned from the journal). Still degrades gracefully if the key is removed. (Historical gotcha: a `KEY= # comment` line parses as empty in dotenv — keep values free of inline comments.)
