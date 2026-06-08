@@ -31,22 +31,22 @@ Phases 1–9 are built and live. This session was a large **UI/UX overhaul** plu
 
 **Other:**
 - Second-brain seed: `server/scripts/seed-second-brain.js` (`npm run seed:brain`, `--reset`) — concept hierarchy + tagged child nodes for a healthy demo graph. The owner intends to wipe seeds (`source_agent='seed'`) once real notes accumulate.
-- Demo GIF recorder: `scripts/record-demos.mjs` (`npm run record:demos`, Playwright→ffmpeg). **Not run** — Playwright/Chromium/ffmpeg aren't installed here; see `docs/gifs/README.md`.
-- `docs/screenshots/home.png` replaced with the new home UI (owner-supplied).
+- Demo tooling: `scripts/record-demos.mjs` (`npm run record:demos`, Playwright→ffmpeg) for browser recordings, plus `scripts/shoot-screenshots.mjs` for refreshed tab screenshots.
+- README media refreshed: current tab GIFs now live in `docs/gifs/` and README embeds the active tabs (Home, Job board, Second brain, Research, Journal, Goals, Calendar, Council, Projects, Settings). The old standalone Accountability README section was removed because that workflow is merged into Goals.
+- `docs/screenshots/*.png` refreshed to the new UI.
 
 ## Verification
 
 - `npm run build` green after every change.
 - All new endpoints verified live: `/api/home`, `/api/brief/digest` (synthesis + caching), `/api/email/{counts,insights,flags}` (paged/filtered), graph `/notes/:id`. Digest regen produced the new topic-labeled format. Add→delete goal cycle verified end-to-end (then cleaned up).
-- Could **not** verify visually in a browser (no headless rendering in this env) — build + endpoint contracts only.
+- Earlier UI work was verified by build + endpoint contracts. The latest README media refresh verified file/link integrity locally; no new runtime behavior was changed.
 
 ## ⚠️ Before pushing
 
-- **`docs/screenshots/home.png` contains some real data** — notably "Payment due reminder for your Discover card" and the owner's actual goals. The repo has a public remote (`github.com/ulyssies/Nexus`) and the README says screenshots use "not real personal data." Decide whether to keep it or swap for a seeded screenshot before pushing; the README disclaimer may need updating either way.
+- **Audit README media for personal data before any public push.** The screenshots/GIFs are generated from the local dashboard, so they may include real inbox/calendar/goals/jobs even when the README copy says demo data.
 - Run the standard secret/PII audit before any push (done for the code diff this session — clean).
 
 ## Suggested next steps
 
 1. Owner: review/merge `feat/ui-overhaul`; decide on the home screenshot (above).
-2. Regenerate the other README screenshots/GIFs (Calendar, Graph, Goals) to match the new UI — needs a browser; `npm run record:demos` once Playwright+ffmpeg are installed.
-3. Visually QA the graph force-tuning (charge `-280`, tag-link strength `0.035` in `GraphView.jsx`) and the three-panel calendar dividers in the browser.
+2. Visually QA the graph force-tuning (charge `-280`, tag-link strength `0.035` in `GraphView.jsx`) and the three-panel calendar dividers in the browser.
