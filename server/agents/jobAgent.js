@@ -23,6 +23,7 @@ import {
   MIN_MATCH_PERCENT, SCORE_BATCH_SIZE, SCORING_MODEL, RESUME_PATHS, getJobTrack,
 } from '../config.js';
 import { makeJobId, normSource, getSeenJobKeys, upsertJobs } from '../db/jobsRepo.js';
+import { getJobCities, getJobTitles } from '../db/settingsRepo.js';
 import db from '../db/index.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -183,15 +184,10 @@ matchPercent must reflect BOTH. A strong skill match at an unrealistic seniority
 
 For each job return ONLY a valid JSON array. No markdown, no explanation. Each object must have:
 - "index": number (0-based index within this batch)
-- "roleSummary": 1-2 sentences describing the actual role and its purpose. Do not copy the company intro or opening boilerplate from the listing.
-- "responsibilities": array of 3-5 concrete responsibilities/duties the person would perform in this role. Infer from the job description when the listing is verbose or boilerplate-heavy.
 - "matchPercent": number 0-100 — combined skill + seniority fit as described above
 - "matchCategory": one of "Excellent" (85-100), "Strong" (70-84), "Good" (55-69), "Fair" (40-54), "Low" (below 40)
-- "alignedStrengths": array of 2-4 concrete candidate strengths from the resume that align with this role
-- "positives": array of 2-4 role positives/opportunities for this candidate
-- "negatives": array of 2-4 role negatives/risks/red flags for this candidate, including seniority or domain concerns
 - "missingSkills": array of 2-3 skill strings the candidate lacks
-- "reason": single sentence explaining the match, noting any seniority gap if present
+- "reason": 1-2 sentences on why this is or isn't a good fit for the candidate — the skill match and any seniority gap. Plain and direct.
 - "estimatedSalary": string (e.g. "$85,000 - $110,000"), or the real salary from the listing when provided. If listing salary exists, use that exact value.
 - "entryLevelFit": boolean — true only if this role is realistically attainable for a candidate with ~1 year of total experience, based on the job description's explicit years-of-experience requirements and seniority signals
 
@@ -216,7 +212,7 @@ async function scoreGroup(jobs, originalIndices, resume, label, log, runId) {
       const response = await trackedCreate({
         agent: 'job', runId,
         model: SCORING_MODEL,
-        max_tokens: 8000,
+        max_tokens: 2500,   // lean JSON (score + reason + missing skills) for a 10-job batch
         messages: [{
           role: 'user',
           content: [
@@ -271,11 +267,6 @@ export function saveScoredJobs(scored) {
     match_category: score.matchCategory || null,
     match_reasons: JSON.stringify({
       reason: score.reason || null,
-      roleSummary: score.roleSummary || null,
-      responsibilities: Array.isArray(score.responsibilities) ? score.responsibilities : [],
-      alignedStrengths: Array.isArray(score.alignedStrengths) ? score.alignedStrengths : [],
-      positives: Array.isArray(score.positives) ? score.positives : [],
-      negatives: Array.isArray(score.negatives) ? score.negatives : [],
       missingSkills: Array.isArray(score.missingSkills) ? score.missingSkills : [],
     }),
     entry_level_fit: score.entryLevelFit === true ? 1 : 0,
@@ -349,9 +340,14 @@ export async function runJobAgent({ trigger = 'manual', cities, titles, skipEmai
   console.log(`\n[job-agent] run start (${trigger})`);
   const runId = startRun('job', trigger);
 
+  // Effective settings: explicit args win, else the user's Settings overrides,
+  // else the config.js defaults. This is how UI-edited locations/terms take hold.
+  const effCities = cities || getJobCities();
+  const effTitles = titles || [...getJobTitles('da'), ...getJobTitles('swe')];
+
   try {
     log('fetching listings');
-    const jobs = await fetchAllJobs({ cities, titles, log });
+    const jobs = await fetchAllJobs({ cities: effCities, titles: effTitles, log });
     console.log(`  [OK] ${jobs.length} new listings`);
 
     let written = 0;

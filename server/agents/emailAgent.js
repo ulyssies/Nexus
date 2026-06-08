@@ -16,7 +16,7 @@
 import { trackedCreate, startRun, finishRun } from './claudeClient.js';
 import { getGmailClient, gmailStatus } from './gmailAuth.js';
 import { EMAIL_SCAN_COUNT } from '../config.js';
-import { upsertFlag, flagExists, addCalendarEvent, findJobByCompany, setJobStatus } from '../db/emailRepo.js';
+import { upsertFlag, flagExists, addCalendarEvent, findJobByCompany, setJobStatus, recordEmailApplication } from '../db/emailRepo.js';
 
 const MODEL = 'claude-sonnet-4-6'; // importance + status inference; Sonnet, not Opus
 
@@ -33,10 +33,12 @@ function parseFrom(from) {
 // ISO from Gmail internalDate (ms epoch string)
 const isoFromInternal = (ms) => ms ? new Date(Number(ms)).toISOString() : null;
 
-// Pull the fresh (unprocessed) inbox messages as lightweight records.
-async function fetchMessages(gmail) {
-  const list = await gmail.users.messages.list({ userId: 'me', maxResults: EMAIL_SCAN_COUNT, q: 'in:inbox newer_than:14d' });
-  const ids = (list.data.messages || []).map((m) => m.id).filter((id) => !flagExists(id));
+// Pull inbox messages as lightweight records. Normally skips already-flagged
+// messages; with reprocess=true it re-reads everything in the window (used by
+// the backfill so previously-flagged application emails get re-evaluated).
+async function fetchMessages(gmail, scanCount = EMAIL_SCAN_COUNT, reprocess = false) {
+  const list = await gmail.users.messages.list({ userId: 'me', maxResults: scanCount, q: 'in:inbox newer_than:14d' });
+  const ids = (list.data.messages || []).map((m) => m.id).filter((id) => reprocess || !flagExists(id));
   const out = [];
   for (const id of ids) {
     const { data } = await gmail.users.messages.get({
@@ -63,21 +65,22 @@ async function classify(messages, runId = null) {
   if (!messages.length) return new Map();
   if (!process.env.ANTHROPIC_API_KEY) {
     // no key: store everything as 'normal', no deadlines/status inference
-    return new Map(messages.map((_, i) => [i, { importance: 'normal', category: null, deadline: null, deadlineTitle: null, company: null, statusSignal: 'none' }]));
+    return new Map(messages.map((_, i) => [i, { importance: 'normal', category: null, deadline: null, deadlineTitle: null, company: null, role: null, statusSignal: 'none' }]));
   }
   const list = messages.map((m, i) =>
     `[${i}] From: ${m.sender} <${m.sender_email}>\n    Subject: ${m.subject}\n    Snippet: ${m.snippet}`).join('\n\n');
   const res = await trackedCreate({
     agent: 'email', runId,
     model: MODEL,
-    max_tokens: 1500,
+    max_tokens: Math.min(8000, 800 + messages.length * 80),   // scale with batch (backfill scans more)
     system: `You triage a job-seeker's inbox. For each email, decide:
 - importance: "urgent" (needs action today / time-sensitive), "important" (matters, not urgent), "normal", or "noise" (newsletters, promos, automated).
 - category: a short freeform label (e.g. "interview", "application", "recruiter", "newsletter", "billing").
 - deadline: if the email states a concrete deadline/appointment, an ISO 8601 datetime; else null. deadlineTitle: a short title for it, else null.
 - company: if this is about a JOB APPLICATION at a company, the company name; else null.
-- statusSignal: the application movement this email implies — "applied" (confirmation received), "interviewing" (interview invite/scheduling), "offer", "rejected", or "none".
-Respond with ONLY JSON: {"emails":[{"index":0,"importance":"...","category":"...","deadline":null,"deadlineTitle":null,"company":null,"statusSignal":"none"}]}. Preserve every index. No markdown.`,
+- role: if this is about a job application AND a specific job title is mentioned, that title; else null.
+- statusSignal: the application movement this email implies — "applied" (you submitted / application received confirmation), "interviewing" (interview invite/scheduling), "offer", "rejected", or "none".
+Respond with ONLY JSON: {"emails":[{"index":0,"importance":"...","category":"...","deadline":null,"deadlineTitle":null,"company":null,"role":null,"statusSignal":"none"}]}. Preserve every index. No markdown.`,
     messages: [{ role: 'user', content: list }],
   });
   const raw = res.content[0].text.replace(/```json|```/g, '').trim();
@@ -89,7 +92,7 @@ Respond with ONLY JSON: {"emails":[{"index":0,"importance":"...","category":"...
  * Run the email agent. Returns a summary object (never throws for the expected
  * degradation cases — those come back as { skipped, reason }).
  */
-export async function runEmailAgent({ trigger = 'cron' } = {}) {
+export async function runEmailAgent({ trigger = 'cron', scanCount, reprocess = false } = {}) {
   const status = gmailStatus();
   if (!status.ready) {
     console.log(`[email:${trigger}] skipped — ${status.reason}`);
@@ -105,7 +108,7 @@ export async function runEmailAgent({ trigger = 'cron' } = {}) {
 
   const runId = startRun('email', trigger);
   try {
-  const messages = await fetchMessages(gmail);
+  const messages = await fetchMessages(gmail, scanCount, reprocess);
   if (!messages.length) {
     console.log(`[email:${trigger}] no new messages`);
     finishRun(runId, { status: 'ok', summary: 'no new messages' });
@@ -113,13 +116,15 @@ export async function runEmailAgent({ trigger = 'cron' } = {}) {
   }
 
   const classifications = await classify(messages, runId);
-  let flagged = 0, deadlines = 0, statusUpdates = 0;
+  let flagged = 0, deadlines = 0, statusUpdates = 0, created = 0;
 
   for (let i = 0; i < messages.length; i++) {
     const msg = messages[i];
-    const c = classifications.get(i) || { importance: 'normal', category: null, deadline: null, statusSignal: 'none' };
+    const c = classifications.get(i) || { importance: 'normal', category: null, deadline: null, role: null, statusSignal: 'none' };
 
-    // cross-agent: company + a real movement signal → flip the job's status
+    // cross-agent: company + a real movement signal → flip the job's status.
+    // If we have no matching job (e.g. you applied on LinkedIn, not via the
+    // agent), CREATE the application from the email so it lands in the tracker.
     let relatedJobId = null;
     let actionTaken = null;
     const desiredStatus = SIGNAL_TO_STATUS[c.statusSignal];
@@ -134,6 +139,17 @@ export async function runEmailAgent({ trigger = 'cron' } = {}) {
           }
         } catch (e) {
           console.error(`  [WARN] email→job status update failed (${c.company}): ${e.message}`);
+        }
+      } else {
+        try {
+          const newJob = recordEmailApplication({ company: c.company, role: c.role, status: desiredStatus, at: msg.received_at });
+          if (newJob) {
+            relatedJobId = newJob.id;
+            actionTaken = `created_application:${desiredStatus}`;
+            created += 1;
+          }
+        } catch (e) {
+          console.error(`  [WARN] email→create application failed (${c.company}): ${e.message}`);
         }
       }
     }
@@ -168,9 +184,9 @@ export async function runEmailAgent({ trigger = 'cron' } = {}) {
     }
   }
 
-  console.log(`[email:${trigger}] ${flagged} flagged · ${deadlines} deadlines · ${statusUpdates} job status updates`);
-    finishRun(runId, { status: 'ok', summary: `${flagged} flagged · ${deadlines} deadlines · ${statusUpdates} job updates` });
-    return { processed: messages.length, flagged, deadlines, statusUpdates };
+  console.log(`[email:${trigger}] ${flagged} flagged · ${deadlines} deadlines · ${statusUpdates} status updates · ${created} new applications`);
+    finishRun(runId, { status: 'ok', summary: `${flagged} flagged · ${deadlines} deadlines · ${statusUpdates} updated · ${created} created` });
+    return { processed: messages.length, flagged, deadlines, statusUpdates, created };
   } catch (e) {
     finishRun(runId, { status: 'error', error: e.message });
     throw e;

@@ -233,3 +233,34 @@ export function setJobStatus(jobId, status, by = 'email') {
      WHERE id = ?`).run(status, by, status, jobId);
   return info.changes > 0;
 }
+
+const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+
+const upsertEmailApp = db.prepare(`
+  INSERT INTO jobs (external_id, source, title, company, url, status, applied_at, status_updated_at, status_updated_by, created_at)
+  VALUES (@ext, 'email', @title, @company, @url, @status, @appliedAt, @at, 'email', @at)
+  ON CONFLICT (source, external_id) DO UPDATE SET
+    status            = excluded.status,
+    status_updated_at = excluded.status_updated_at,
+    status_updated_by = 'email',
+    applied_at        = COALESCE(jobs.applied_at, excluded.applied_at),
+    title             = CASE WHEN jobs.title = 'Application (via email)' THEN excluded.title ELSE jobs.title END`);
+
+/**
+ * Record an application the agent learned about from email but that isn't in the
+ * jobs table (e.g. you applied on LinkedIn, not via the agent). Keyed on
+ * company(+role) so repeated emails update the same row instead of duplicating.
+ * `at` should be the email's received date so ghosting math is accurate on a
+ * backfill. Returns the created/updated job row.
+ */
+export function recordEmailApplication({ company, role = null, status, url = null, at = null }) {
+  const co = String(company || '').trim();
+  if (!co) return null;
+  if (!VALID_JOB_STATUS.has(status)) throw new Error(`invalid job status: ${status}`);
+  const when = at || new Date().toISOString();
+  const title = (role && String(role).trim()) || 'Application (via email)';
+  const ext = `email:${slug(co)}${role ? ':' + slug(role) : ''}`;
+  const appliedAt = status === 'applied' ? when : null;
+  upsertEmailApp.run({ ext, title, company: co, url, status, appliedAt, at: when });
+  return db.prepare('SELECT * FROM jobs WHERE source = ? AND external_id = ?').get('email', ext);
+}

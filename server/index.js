@@ -16,6 +16,7 @@ import calendarRouter from './routes/calendar.js';
 import overviewRouter, { homeRouter } from './routes/overview.js';
 import observabilityRouter from './routes/observability.js';
 import researchRouter from './routes/research.js';
+import settingsRouter from './routes/settings.js';
 import db, { DB_PATH } from './db/index.js';
 import { runJobAgent } from './agents/jobAgent.js';
 import { runAccountability } from './agents/accountabilityAgent.js';
@@ -24,7 +25,7 @@ import { runMorningBrief } from './agents/morningBriefAgent.js';
 import { runEmailAgent } from './agents/emailAgent.js';
 import { purgeStaleJobs } from './db/maintenance.js';
 import {
-  JOB_AGENT_CRON, JOB_AGENT_CATCHUP_HOURS, ACCOUNTABILITY_CRON,
+  JOB_AGENT_CRON, JOB_AGENT_CRON_ENABLED, JOB_AGENT_CATCHUP_HOURS, ACCOUNTABILITY_CRON,
   ARCHIVIST_CRON, BRIEF_CRON, EMAIL_CRON,
 } from './config.js';
 
@@ -47,6 +48,7 @@ app.use('/api/overview', overviewRouter);
 app.use('/api/home', homeRouter);
 app.use('/api/observability', observabilityRouter);
 app.use('/api/research', researchRouter);
+app.use('/api/settings', settingsRouter);
 
 function parseDbTime(value) {
   if (!value) return null;
@@ -98,20 +100,37 @@ async function runJobCatchupIfDue() {
 app.listen(PORT, () => {
   console.log(`Nexus server on http://localhost:${PORT}  (db: ${DB_PATH})`);
 
+  // Reconcile orphaned runs: a fresh process means nothing from a previous one
+  // can still be running, so any 'running' rows are aborted leftovers (e.g. the
+  // process was killed mid-run). Close them out — otherwise they wrongly read as
+  // "in flight", suppress the job catch-up, and show as perpetually running.
+  const orphaned = db.prepare(`
+    UPDATE agent_runs SET status = 'error',
+           error = COALESCE(error, 'aborted — server restarted mid-run'),
+           finished_at = datetime('now')
+     WHERE status = 'running'`).run().changes;
+  if (orphaned) console.log(`[boot] closed ${orphaned} orphaned run(s) from a previous process`);
+
   // Schedules register in-process and persist as long as this process runs —
   // the whole reason the backend is one long-lived Express process.
-  cron.schedule(JOB_AGENT_CRON, async () => {
-    try {
-      await runJobAgent({ trigger: 'cron' });
-      // Each run also sweeps unapplied listings older than 30 days.
-      const { deleted } = purgeStaleJobs({ days: 30 });
-      if (deleted) console.log(`[cron] purged ${deleted} stale unapplied jobs`);
-    } catch (e) {
-      console.error(`[cron] job agent run failed: ${e.message}`);
-    }
-  });
-  console.log(`Job agent cron registered: "${JOB_AGENT_CRON}" (07:00 every 3rd day)`);
-  setTimeout(() => { runJobCatchupIfDue(); }, 5000);
+  // Job agent automation is gated by JOB_AGENT_CRON_ENABLED — currently OFF, so
+  // the agent only runs via the "run now" button (POST /api/jobs/run).
+  if (JOB_AGENT_CRON_ENABLED) {
+    cron.schedule(JOB_AGENT_CRON, async () => {
+      try {
+        await runJobAgent({ trigger: 'cron' });
+        // Each run also sweeps unapplied listings older than 30 days.
+        const { deleted } = purgeStaleJobs({ days: 30 });
+        if (deleted) console.log(`[cron] purged ${deleted} stale unapplied jobs`);
+      } catch (e) {
+        console.error(`[cron] job agent run failed: ${e.message}`);
+      }
+    });
+    console.log(`Job agent cron registered: "${JOB_AGENT_CRON}" (07:00 daily)`);
+    setTimeout(() => { runJobCatchupIfDue(); }, 5000);
+  } else {
+    console.log('Job agent automation DISABLED — manual "run now" only (JOB_AGENT_CRON_ENABLED=false)');
+  }
 
   // Accountability: nightly streak refresh + check-in nudge. Pure local
   // (no external key needed); the nudge degrades to a template without one.
@@ -124,7 +143,7 @@ app.listen(PORT, () => {
   });
   console.log(`Accountability cron registered: "${ACCOUNTABILITY_CRON}" (20:00 daily)`);
 
-  // Project archivist: poll git history every 30 min, and watch each repo's
+  // Project archivist: poll git history every 10 min, and watch each repo's
   // .git/logs/HEAD for prompt scans. Sandboxed to WATCHED_PROJECTS paths.
   cron.schedule(ARCHIVIST_CRON, async () => {
     try {
@@ -134,7 +153,7 @@ app.listen(PORT, () => {
     }
   });
   startWatchers();
-  console.log(`Archivist cron registered: "${ARCHIVIST_CRON}" (every 30 min)`);
+  console.log(`Archivist cron registered: "${ARCHIVIST_CRON}" (every 10 min)`);
 
   // Morning brief: curate a personal news digest at dawn. Degrades to an empty
   // brief (with an explanatory note) when NEWS_API_KEY isn't set.
@@ -145,9 +164,9 @@ app.listen(PORT, () => {
       console.error(`[cron] morning brief run failed: ${e.message}`);
     }
   });
-  console.log(`Morning brief cron registered: "${BRIEF_CRON}" (06:00 daily)`);
+  console.log(`Morning brief cron registered: "${BRIEF_CRON}" (06:00 / 12:00 / 18:00)`);
 
-  // Email agent: daily read-only Gmail triage. No-ops with a clear log line
+  // Email agent: read-only Gmail triage every 15 min. No-ops with a clear log line
   // until `npm run gmail:auth` has been run (credentials + token present).
   cron.schedule(EMAIL_CRON, async () => {
     try {
@@ -156,5 +175,5 @@ app.listen(PORT, () => {
       console.error(`[cron] email agent run failed: ${e.message}`);
     }
   });
-  console.log(`Email agent cron registered: "${EMAIL_CRON}" (08:00 daily)`);
+  console.log(`Email agent cron registered: "${EMAIL_CRON}" (every 15 min)`);
 });

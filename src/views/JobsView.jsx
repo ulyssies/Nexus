@@ -47,6 +47,22 @@ const LEVEL_STYLE = {
 const STEPS = ['applied', 'screen', 'interview', 'offer'];
 const STATUS_STEP = { interested: 0, applied: 0, interviewing: 2, offer: 3, rejected: 0, withdrawn: 0, archived: 0 };
 
+// The Live tracker is strictly things you've ACTUALLY applied to and are still
+// pursuing. "interested" is a pre-application shortlist (lives on the Found
+// side), and rejected/withdrawn/archived are closed-out (the Inactive tab).
+const ACTIVE_APP_STATUSES = new Set(['applied', 'interviewing', 'offer']);
+const INACTIVE_STATUSES = new Set(['rejected', 'withdrawn', 'archived']);
+
+// "Ghosted": you applied but heard nothing back in 30 days. Derived (not a real
+// status) so it auto-clears if the company finally responds and advances it.
+const GHOST_DAYS = 30;
+function daysSince(ts) {
+  if (!ts) return Infinity;
+  const d = new Date(String(ts).includes('T') ? ts : String(ts).replace(' ', 'T') + 'Z');
+  return Number.isNaN(d.getTime()) ? Infinity : (Date.now() - d.getTime()) / 86400000;
+}
+const isGhosted = (a) => a.status === 'applied' && daysSince(a.appliedAt || a.statusUpdatedAt) >= GHOST_DAYS;
+
 function formatDate(value) {
   if (!value) return '-';
   const d = new Date(String(value).includes('T') ? value : String(value).replace(' ', 'T') + 'Z');
@@ -125,20 +141,15 @@ function DetailTags({ label, items, tone = 'neutral', empty = 'None stored yet' 
 }
 
 function RoleDescription({ job }) {
-  const responsibilities = Array.isArray(job.responsibilities) ? job.responsibilities : [];
+  // The listing's own description text (what the agent scored against) — no
+  // extra Claude tokens spent generating a summary.
+  const text = (job.description || '').trim()
+    || (job.roleSummary || '').trim();   // fall back to legacy rows' generated summary
   return (
     <div className="role-description">
-      <p className="job-description">
-        {job.roleSummary || 'No role summary has been generated for this listing yet. The next job-agent run will summarize the role and responsibilities instead of showing the raw provider intro.'}
-      </p>
-      <div className="card-title role-responsibilities-title">responsibilities</div>
-      {responsibilities.length ? (
-        <ul className="job-responsibilities">
-          {responsibilities.map((item) => <li key={item}>{item}</li>)}
-        </ul>
-      ) : (
-        <p className="job-description text-dim">No structured responsibilities stored yet.</p>
-      )}
+      {text
+        ? <p className="job-description" style={{ whiteSpace: 'pre-wrap', maxHeight: 320, overflow: 'auto' }}>{text}</p>
+        : <p className="job-description text-dim">No description was provided for this listing.</p>}
     </div>
   );
 }
@@ -153,7 +164,12 @@ function filterParams(filters, sort) {
   return params;
 }
 
-function groupRows(jobs, expandedCompanies) {
+function groupRows(jobs, expandedCompanies, sort) {
+  // Company folders only make sense when sorting BY company. In newest/match
+  // views, grouping would bury the most recent listings under a few big
+  // companies — so keep those views flat and let the newest jobs surface.
+  if (sort !== 'company') return jobs.map((job) => ({ type: 'job', job }));
+
   const stats = new Map();
   for (const job of jobs) {
     const current = stats.get(job.company) || { count: 0, highest: 0, jobs: [] };
@@ -185,8 +201,7 @@ function JobDetail({ job, onClose, onApplied, onStatusChange, applying, updating
   const pct = Math.round(job.matchScore || 0);
   const color = matchColor(pct);
   const canApply = !['applied', 'interviewing', 'offer'].includes(job.status);
-  const strengths = job.alignedStrengths || job.alignedSkills || [];
-  const negatives = job.negatives?.length ? job.negatives : job.missingSkills;
+  const missingSkills = job.missingSkills || [];
   return (
     <tr className="job-detail-row" data-job-panel>
       <td colSpan="7">
@@ -213,11 +228,9 @@ function JobDetail({ job, onClose, onApplied, onStatusChange, applying, updating
             </div>
 
             <div className="job-detail-section">
-              <div className="card-title">match reasoning</div>
+              <div className="card-title">why this fit</div>
               <p className="job-description">{job.reason || 'No score reasoning was stored for this listing.'}</p>
-              <DetailTags label="strengths" items={strengths} tone="positive" empty="See reasoning" />
-              <DetailTags label="positives" items={job.positives} tone="positive" />
-              <DetailTags label="negatives" items={negatives} tone="negative" />
+              <DetailTags label="missing skills" items={missingSkills} tone="negative" empty="None flagged" />
             </div>
           </div>
 
@@ -238,6 +251,46 @@ function JobDetail({ job, onClose, onApplied, onStatusChange, applying, updating
         </div>
       </td>
     </tr>
+  );
+}
+
+// Shared renderer for both the live and inactive application trackers. For
+// inactive (closed-out) apps the progress timeline is meaningless, so the
+// middle column shows a plain "closed" note instead.
+function ApplicationTracker({ title, subtitle, list, emptyText, onStatusChange, updatingStatusId, inactive = false }) {
+  return (
+    <div className="card application-tracker-card">
+      <div className="job-board-head">
+        <div>
+          <div className="card-title" style={{ marginBottom: 2 }}>{title}</div>
+          <div className="text-xs text-dim">{subtitle}</div>
+        </div>
+      </div>
+      <div className="application-list">
+      {list.length === 0 ? (
+        <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>{emptyText}</p>
+      ) : (
+        list.map((a) => (
+          <div className="application-row" key={a.id}>
+            <div className="application-title">
+              <span>{a.company || 'Unknown company'} - {a.title || 'Untitled role'}</span>
+              {a._ghosted
+                ? <span className="badge" style={{ background: 'var(--bg-raised)', color: 'var(--warn)' }}>Ghosted</span>
+                : <StatusBadge job={a} />}
+            </div>
+            {inactive
+              ? <div className="text-xs text-dim" style={{ textTransform: 'capitalize' }}>
+                  {a._ghosted ? 'ghosted · no reply in 30 days' : `closed · ${a.status}`}
+                </div>
+              : <Timeline status={a.status} />}
+            <div className="application-actions">
+              <StatusSelect job={a} onChange={onStatusChange} disabled={updatingStatusId === a.id} />
+            </div>
+          </div>
+        ))
+      )}
+      </div>
+    </div>
   );
 }
 
@@ -377,10 +430,21 @@ export default function JobsView() {
     }
   }
 
-  const displayRows = useMemo(() => groupRows(jobs, expandedCompanies), [jobs, expandedCompanies]);
+  const displayRows = useMemo(() => groupRows(jobs, expandedCompanies, sort), [jobs, expandedCompanies, sort]);
+  const grouped = sort === 'company';
   const pageCount = Math.max(1, Math.ceil(displayRows.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const visibleRows = displayRows.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Split the tracker: applied-and-pursuing vs. closed-out (incl. ghosted) vs. shortlisted.
+  const activeApps = useMemo(() => apps.filter((a) => ACTIVE_APP_STATUSES.has(a.status) && !isGhosted(a)), [apps]);
+  const inactiveApps = useMemo(
+    () => apps.filter((a) => INACTIVE_STATUSES.has(a.status) || isGhosted(a)).map((a) => ({ ...a, _ghosted: isGhosted(a) })),
+    [apps],
+  );
+  const shortlistCount = useMemo(() => apps.filter((a) => a.status === 'interested').length, [apps]);
+  const shortlistOn = filters.status === 'interested';
+  const newCount = useMemo(() => jobs.filter((j) => j.isNew).length, [jobs]);
 
   const statCards = useMemo(() => ([
     { value: stats?.totalSeen ?? '-', label: 'total jobs seen', color: 'var(--accent)' },
@@ -420,7 +484,15 @@ export default function JobsView() {
           role="tab"
           aria-selected={boardTab === 'applications'}
         >
-          Live applications
+          Live applications{activeApps.length ? ` (${activeApps.length})` : ''}
+        </button>
+        <button
+          className={`job-subtab${boardTab === 'inactive' ? ' active' : ''}`}
+          onClick={() => setBoardTab('inactive')}
+          role="tab"
+          aria-selected={boardTab === 'inactive'}
+        >
+          Inactive applications{inactiveApps.length ? ` (${inactiveApps.length})` : ''}
         </button>
       </div>
 
@@ -438,12 +510,24 @@ export default function JobsView() {
       <div className="card">
         <div className="job-board-head">
           <div>
-            <div className="card-title" style={{ marginBottom: 2 }}>live listings {loading ? '· ...' : `· ${jobs.length} matched`}</div>
-            <div className="text-xs text-dim">page {currentPage} of {pageCount} · {displayRows.length} visible rows after grouping</div>
+            <div className="card-title" style={{ marginBottom: 2 }}>
+              {shortlistOn ? 'shortlist' : 'live listings'} {loading ? '· ...' : `· ${jobs.length} ${shortlistOn ? 'saved' : 'matched'}`}
+              {!shortlistOn && newCount > 0 && <span className="badge" style={{ background: 'var(--success-dim, rgba(78,203,168,0.15))', color: 'var(--success)', marginLeft: 8 }}>{newCount} new this scan</span>}
+            </div>
+            <div className="text-xs text-dim">page {currentPage} of {pageCount}{grouped ? ` · ${displayRows.length} rows (grouped by company)` : ''}</div>
           </div>
-          <button className="btn btn-primary" onClick={handleRun} disabled={running}>
-            {running ? `running · ${run?.step || '...'}` : 'run now'}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              className={`btn${shortlistOn ? ' btn-primary' : ''}`}
+              onClick={() => updateFilter('status', shortlistOn ? 'all' : 'interested')}
+              title="Roles you marked Interested — your shortlist to revisit"
+            >
+              {shortlistOn ? '× clear shortlist' : `★ Shortlist${shortlistCount ? ` (${shortlistCount})` : ''}`}
+            </button>
+            <button className="btn btn-primary" onClick={handleRun} disabled={running}>
+              {running ? `running · ${run?.step || '...'}` : 'run now'}
+            </button>
+          </div>
         </div>
 
         <div className="job-filter-bar">
@@ -541,7 +625,10 @@ export default function JobsView() {
                     onClick={() => setOpenId((id) => (id === j.id ? null : j.id))}
                   >
                     <td><div className="job-company">{j.company}</div></td>
-                    <td className="job-title-cell">{j.title}</td>
+                    <td className="job-title-cell">
+                      {j.isNew && <span className="badge" style={{ background: 'var(--success-dim, rgba(78,203,168,0.15))', color: 'var(--success)', marginRight: 6 }}>new</span>}
+                      {j.title}
+                    </td>
                     <td className="text-mono text-xs">{j.location || '-'}</td>
                     <td className="text-mono text-xs">{formatDate(j.postedAt || j.addedAt)}</td>
                     <td>
@@ -582,32 +669,26 @@ export default function JobsView() {
       )}
 
       {boardTab === 'applications' && (
-      <div className="card application-tracker-card">
-        <div className="job-board-head">
-          <div>
-            <div className="card-title" style={{ marginBottom: 2 }}>application tracker</div>
-            <div className="text-xs text-dim">{apps.length} live applications from manual clicks and email confirmations</div>
-          </div>
-        </div>
-        {apps.length === 0 ? (
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            No applications yet. Manual applied clicks and email-agent confirmations will populate this timeline.
-          </p>
-        ) : (
-          apps.map((a) => (
-            <div className="application-row" key={a.id}>
-              <div className="application-title">
-                <span>{a.company} - {a.title}</span>
-                <StatusBadge job={a} />
-              </div>
-              <Timeline status={a.status} />
-              <div className="application-actions">
-                <StatusSelect job={a} onChange={setJobStatus} disabled={updatingStatusId === a.id} />
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+        <ApplicationTracker
+          title="application tracker"
+          subtitle={`${activeApps.length} live application${activeApps.length === 1 ? '' : 's'} from manual clicks and email confirmations`}
+          list={activeApps}
+          emptyText="No active applications yet. Manual applied clicks and email-agent confirmations will populate this timeline."
+          onStatusChange={setJobStatus}
+          updatingStatusId={updatingStatusId}
+        />
+      )}
+
+      {boardTab === 'inactive' && (
+        <ApplicationTracker
+          title="inactive applications"
+          subtitle={`${inactiveApps.length} closed-out application${inactiveApps.length === 1 ? '' : 's'} — withdrawn, rejected, or archived`}
+          list={inactiveApps}
+          emptyText="No inactive applications. When you withdraw, reject, or archive an application it moves here automatically."
+          onStatusChange={setJobStatus}
+          updatingStatusId={updatingStatusId}
+          inactive
+        />
       )}
     </div>
   );

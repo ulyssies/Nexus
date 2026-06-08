@@ -362,6 +362,18 @@ CREATE INDEX IF NOT EXISTS idx_open_questions_note ON research_open_questions(no
 CREATE INDEX IF NOT EXISTS idx_open_questions_resolved ON research_open_questions(resolved);
 
 -- ============================================================
+--  app_settings — UI-editable agent settings (key → JSON value).
+--  Overrides the static defaults in config.js so the user can change
+--  things like job-search locations from Settings without editing code.
+--  A missing key means "use the config.js default".
+-- ============================================================
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT NOT NULL,                 -- JSON
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ============================================================
 --  updated_at touch triggers for the mutable tables
 -- ============================================================
 CREATE TRIGGER IF NOT EXISTS trg_notes_updated AFTER UPDATE ON notes

@@ -34,9 +34,13 @@ router.get('/flags', (req, res) => {
 
 // POST /api/email/run — scan + classify now. Returns the run summary, or a
 // clear { skipped, reason } when Gmail isn't set up yet (never a 500 for that).
-router.post('/run', async (_req, res) => {
+router.post('/run', async (req, res) => {
   try {
-    const result = await runEmailAgent({ trigger: 'manual' });
+    // ?count=N scans more of the last 2 weeks (one-time backfill); ?reprocess=1
+    // re-reads already-flagged emails so prior application emails get backfilled.
+    const count = Math.min(parseInt(req.query.count, 10) || 0, 100) || undefined;
+    const reprocess = req.query.reprocess === '1';
+    const result = await runEmailAgent({ trigger: (count || reprocess) ? 'backfill' : 'manual', scanCount: count, reprocess });
     res.json(result);
   } catch (e) {
     res.status(500).json({ error: e.message });

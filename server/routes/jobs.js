@@ -132,17 +132,26 @@ router.get('/', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 5000, 5000);
   const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
   const { clause, params } = buildJobFilter(req.query);
+  // The Found board is agent-discovered listings only. Applications created from
+  // email (source='email') are tracker-only stubs — keep them off this board.
+  const boardClause = `${clause} AND COALESCE(source, '') <> 'email'`;
 
   const rows = db.prepare(`
     SELECT *, ${LEVEL_SQL} AS inferred_level
-      FROM jobs ${clause}
+      FROM jobs ${boardClause}
       ${orderBy(req.query.sort)}
       LIMIT @limit OFFSET @offset
   `).all({ ...params, limit, offset });
 
-  const total = db.prepare(`SELECT COUNT(*) n FROM jobs ${clause}`).get(params).n;
+  const total = db.prepare(`SELECT COUNT(*) n FROM jobs ${boardClause}`).get(params).n;
 
-  res.json({ jobs: rows.map(toCard), count: rows.length, total, limit, offset });
+  // "New since last scan": rows created in the most recent completed job run.
+  const lastScanAt = db.prepare(
+    "SELECT MAX(started_at) v FROM agent_runs WHERE agent = 'job' AND status = 'ok'"
+  ).get()?.v || null;
+  const jobs = rows.map((r) => ({ ...toCard(r), isNew: !!(lastScanAt && r.created_at >= lastScanAt) }));
+
+  res.json({ jobs, count: rows.length, total, limit, offset, lastScanAt });
 });
 
 // GET /api/jobs/stats — the four stat cards on the Job board.

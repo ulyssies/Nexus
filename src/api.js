@@ -91,6 +91,15 @@ export const api = {
   // observability (Settings → agent runs, errors, cost)
   observability: () => get('/observability'),
 
+  // agent settings (Settings → per-agent controls)
+  jobSettings: () => get('/settings/job'),
+  setJobCities: (cities) => put('/settings/job/cities', { cities }),
+  resetJobCities: () => del('/settings/job/cities'),
+  setJobTitles: (track, titles) => put(`/settings/job/titles/${track}`, { titles }),
+  resetJobTitles: (track) => del(`/settings/job/titles/${track}`),
+  jobResume: (track) => get(`/settings/job/resume/${track}`),
+  setJobResume: (track, content) => put(`/settings/job/resume/${track}`, { content }),
+
   // research agent — chat sessions that distill into second-brain nodes
   researchSessions: () => get('/research/sessions'),
   researchSession: (id) => get(`/research/sessions/${id}`),
