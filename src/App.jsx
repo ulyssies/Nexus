@@ -9,6 +9,7 @@ import ProjectsView from './views/ProjectsView.jsx';
 import HomeView from './views/HomeView.jsx';
 import CalendarView from './views/CalendarView.jsx';
 import SettingsView from './views/SettingsView.jsx';
+import ResearchView from './views/ResearchView.jsx';
 import Placeholder from './views/Placeholder.jsx';
 
 // Topbar title/subtitle per view — ported from master.html viewMeta.
@@ -16,6 +17,7 @@ const VIEW_META = {
   home: ['Morning digest', '· good morning'],
   jobs: ['Job board', '· this run'],
   graph: ['Second brain', '· knowledge graph'],
+  research: ['Research', '· distill sessions into knowledge'],
   journal: ['Journal', '· 24 entries'],
   goals: ['Goals', '· 6 active'],
   calendar: ['Calendar', '· june 2026'],
@@ -35,6 +37,9 @@ const NAV = [
   ) },
   { id: 'graph', tip: 'Second brain', icon: (
     <svg viewBox="0 0 24 24"><circle cx="12" cy="5" r="2" /><circle cx="5" cy="19" r="2" /><circle cx="19" cy="19" r="2" /><path d="M12 7v4M12 11l-5.5 6M12 11l5.5 6" /></svg>
+  ) },
+  { id: 'research', tip: 'Research', dot: 'var(--news)', icon: (
+    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
   ) },
   { divider: true },
   { id: 'journal', tip: 'Journal', icon: (
@@ -124,6 +129,7 @@ export default function App() {
             : view === 'jobs' ? <JobsView />
             : view === 'journal' ? <JournalView />
             : view === 'graph' ? <GraphView />
+            : view === 'research' ? <ResearchView />
             : view === 'council' ? <CouncilView />
             : view === 'goals' ? <GoalsView />
             : view === 'accountability' ? <AccountabilityView />

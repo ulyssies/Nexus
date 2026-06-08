@@ -37,6 +37,10 @@ export const api = {
   createNote: (note) => post('/notes', note),
   setNoteTags: (id, tags) => put(`/notes/${id}/tags`, { tags }),
   noteGraph: () => get('/notes/graph'),
+  // hierarchy (Phase 9)
+  noteParents: () => get('/notes/parents'),
+  createConcept: (payload) => post('/notes/concepts', payload),
+  setNoteParent: (id, parent_id) => put(`/notes/${id}/parent`, { parent_id }),
 
   // council of 5
   councilElders: () => get('/council/elders'),
@@ -74,6 +78,16 @@ export const api = {
 
   // observability (Settings → agent runs, errors, cost)
   observability: () => get('/observability'),
+
+  // research agent — chat sessions that distill into second-brain nodes
+  researchSessions: () => get('/research/sessions'),
+  researchSession: (id) => get(`/research/sessions/${id}`),
+  newResearchSession: (topic) => post('/research/sessions', { topic }),
+  researchChat: (id, message) => post(`/research/sessions/${id}/message`, { message }),
+  researchSource: (id, payload) => post(`/research/sessions/${id}/source`, payload),
+  saveResearchSession: (id, parent_id) => post(`/research/sessions/${id}/save`, { parent_id }),
+  openQuestions: (resolved = 0) => get(`/research/open-questions?resolved=${resolved}`),
+  resolveQuestion: (id) => put(`/research/open-questions/${id}/resolve`),
 
   // email agent + calendar
   emailStatus: () => get('/email/status'),
