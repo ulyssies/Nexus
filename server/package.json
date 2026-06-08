@@ -9,7 +9,8 @@
     "start": "node index.js",
     "migrate:jobs": "node scripts/migrate-jobs.js",
     "purge:jobs": "node scripts/purge-stale-jobs.js",
-    "gmail:auth": "node scripts/gmail-auth.js"
+    "gmail:auth": "node scripts/gmail-auth.js",
+    "seed:brain": "node scripts/seed-second-brain.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",

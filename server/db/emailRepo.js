@@ -50,6 +50,47 @@ export function listFlags({ importance = null, limit = 100 } = {}) {
   return rows;
 }
 
+// The inbox filter tabs map to a WHERE clause. importance is a strict enum;
+// the category tabs match the AI's freeform category labels by substring (the
+// agent emits e.g. 'job-alert', 'recruiter', 'newsletter', 'promo').
+function filterClause(filter) {
+  switch (filter) {
+    case 'urgent':     return "importance = 'urgent'";
+    case 'important':  return "importance = 'important'";
+    case 'noise':      return "importance = 'noise'";
+    case 'job-alert':  return "(category LIKE '%job%' OR category LIKE '%recruit%' OR category LIKE '%application%')";
+    case 'newsletter': return "(category LIKE '%news%' OR category LIKE '%promo%' OR category LIKE '%market%' OR category LIKE '%alumni%')";
+    case 'all':
+    default:           return "importance != 'noise'";   // default view hides noise
+  }
+}
+
+/** Paginated, filtered inbox + total for the pager. */
+export function listFlagsPaged({ filter = 'all', page = 1, pageSize = 25 } = {}) {
+  const where = filterClause(filter);
+  const total = db.prepare(`SELECT COUNT(*) n FROM email_flags WHERE ${where}`).get().n;
+  const pages = Math.max(1, Math.ceil(total / pageSize));
+  const p = Math.min(Math.max(1, page), pages);
+  const flags = db.prepare(
+    `SELECT * FROM email_flags WHERE ${where} ORDER BY received_at DESC, id DESC LIMIT ? OFFSET ?`
+  ).all(pageSize, (p - 1) * pageSize);
+  return { flags, total, page: p, pages, pageSize };
+}
+
+/** Per-tab counts for the filter bar (and the "show N noise" toggle). */
+export function flagCounts() {
+  const c = (sql) => db.prepare(`SELECT COUNT(*) n FROM email_flags ${sql}`).get().n;
+  return {
+    all:        c("WHERE importance != 'noise'"),
+    urgent:     c("WHERE importance = 'urgent'"),
+    important:  c("WHERE importance = 'important'"),
+    'job-alert':c(`WHERE ${filterClause('job-alert')}`),
+    newsletter: c(`WHERE ${filterClause('newsletter')}`),
+    noise:      c("WHERE importance = 'noise'"),
+    total:      c(''),
+  };
+}
+
 export function flagStats() {
   const row = (sql, ...a) => db.prepare(sql).get(...a).n;
   return {
@@ -58,6 +99,77 @@ export function flagStats() {
     unread: row('SELECT COUNT(*) n FROM email_flags WHERE is_unread = 1'),
     deadlines: row('SELECT COUNT(*) n FROM email_flags WHERE deadline_at IS NOT NULL'),
   };
+}
+
+// ── agent communication rail — plain-language insights from the last scan ─────
+// Read-only DERIVATION from what the agent already classified (no agent logic
+// here): deadlines it extracted, recruiters/job-alerts it saw, urgent items it
+// flagged, and any cross-agent job-status flips it made.
+const epochMs = (ts) => {
+  if (!ts) return 0;
+  const t = Date.parse(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z');
+  return Number.isFinite(t) ? t : 0;
+};
+function whenLabel(ts) {
+  const t = epochMs(ts);
+  if (!t) return '';
+  const days = Math.round((t - Date.now()) / 86_400_000);
+  if (days < 0) return `${Math.abs(days)}d ago`;
+  if (days === 0) return 'today';
+  if (days === 1) return 'tomorrow';
+  if (days <= 7) return `in ${days} days`;
+  return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+export function emailInsights() {
+  const out = [];
+
+  // 1) deadlines the agent extracted into the calendar (most actionable first)
+  for (const e of db.prepare(
+    "SELECT title, start_at FROM calendar_events WHERE source_agent = 'email' AND start_at >= datetime('now','-1 day') ORDER BY start_at ASC LIMIT 6"
+  ).all()) {
+    out.push({ kind: 'deadline', text: `${e.title} — ${whenLabel(e.start_at)} (${new Date(epochMs(e.start_at)).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}).`, at: e.start_at });
+  }
+  // deadlines still only on the flag (not yet a calendar event)
+  for (const f of db.prepare(
+    `SELECT subject, sender, deadline_at FROM email_flags WHERE deadline_at IS NOT NULL
+       AND deadline_at >= datetime('now','-1 day')
+       AND NOT EXISTS (SELECT 1 FROM calendar_events c WHERE c.source_agent='email' AND c.start_at = email_flags.deadline_at)
+     ORDER BY deadline_at ASC LIMIT 4`
+  ).all()) {
+    out.push({ kind: 'deadline', text: `Deadline ${whenLabel(f.deadline_at)} — from ${f.sender || 'an email'}: “${String(f.subject || '').slice(0, 50)}”.`, at: f.deadline_at });
+  }
+
+  // 2) urgent items flagged this scan
+  const urgent = db.prepare("SELECT subject, sender FROM email_flags WHERE importance = 'urgent' ORDER BY received_at DESC LIMIT 3").all();
+  if (urgent.length) {
+    out.push({ kind: 'urgent', text: `${urgent.length} urgent email${urgent.length === 1 ? '' : 's'} flagged — ${urgent.map((u) => u.sender || 'unknown').join(', ')}.`, at: null });
+  }
+
+  // 3) recruiters / job alerts
+  const recruiters = db.prepare("SELECT DISTINCT sender FROM email_flags WHERE category LIKE '%recruit%' AND sender IS NOT NULL LIMIT 4").all().map((r) => r.sender);
+  if (recruiters.length) {
+    out.push({ kind: 'job', text: `${recruiters.length} recruiter${recruiters.length === 1 ? '' : 's'} reached out — ${recruiters.join(', ')}.`, at: null });
+  }
+  const jobAlerts = db.prepare("SELECT COUNT(*) n FROM email_flags WHERE category LIKE '%job%' OR category LIKE '%application%'").get().n;
+  if (jobAlerts) {
+    const top = db.prepare("SELECT sender, COUNT(*) n FROM email_flags WHERE category LIKE '%job%' OR category LIKE '%application%' GROUP BY sender ORDER BY n DESC LIMIT 1").get();
+    out.push({ kind: 'job', text: `${jobAlerts} job alert${jobAlerts === 1 ? '' : 's'} in your inbox${top?.sender ? ` — mostly from ${top.sender}` : ''}.`, at: null });
+  }
+
+  // 4) cross-agent job-status flips the agent made
+  for (const f of db.prepare(
+    "SELECT subject, action_taken FROM email_flags WHERE action_taken IS NOT NULL ORDER BY received_at DESC LIMIT 3"
+  ).all()) {
+    out.push({ kind: 'action', text: `Acted on the job board: ${String(f.action_taken).replace('updated_job_status:', 'set application → ')} (from “${String(f.subject || '').slice(0, 40)}”).`, at: null });
+  }
+
+  // 5) volume note when nothing else is pressing
+  if (!out.length) {
+    const total = db.prepare('SELECT COUNT(*) n FROM email_flags').get().n;
+    out.push({ kind: 'info', text: total ? `Triaged ${total} emails — nothing urgent right now.` : 'No emails triaged yet — run a scan to start.', at: null });
+  }
+  return out;
 }
 
 // ── calendar_events (also written by the email agent: extracted deadlines) ────

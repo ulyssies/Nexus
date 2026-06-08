@@ -15,11 +15,19 @@
 //      as the item summary (no AI condense). Nothing crashes.
 // ============================================================
 import { trackedCreate, startRun, finishRun } from './claudeClient.js';
-import { effectiveInterests, saveBrief, getBrief } from '../db/briefRepo.js';
+import { effectiveInterests, saveBrief, getBrief, saveDigest } from '../db/briefRepo.js';
 import { BRIEF_ARTICLE_COUNT, BRIEF_LOOKBACK_DAYS } from '../config.js';
 
 const MODEL = 'claude-sonnet-4-6';
+const DIGEST_TTL_HOURS = 6;
 const today = () => new Date().toISOString().slice(0, 10);
+
+// hours since a SQLite ('YYYY-MM-DD HH:MM:SS' UTC) / ISO timestamp
+function hoursSince(ts) {
+  if (!ts) return Infinity;
+  const t = Date.parse(ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z');
+  return Number.isFinite(t) ? (Date.now() - t) / 36e5 : Infinity;
+}
 
 // Pull recent articles for the interests from NewsAPI. Returns [] on no key.
 async function fetchNews(interests) {
@@ -133,6 +141,65 @@ export async function runMorningBrief({ trigger = 'cron' } = {}) {
     console.error(`[brief:${trigger}] failed: ${e.message}`);
     finishRun(runId, { status: 'error', error: e.message });
     return saveBrief({ brief_date: date, summary: `Couldn't build the brief today: ${e.message}`, items: [] });
+  }
+}
+
+/**
+ * The home-screen digest: a substantive daily read grouped under bold topic
+ * headers (**AI & Engineering**, **Career**, **Learning**), 2–4 concrete sentences
+ * per story with an actionable angle. Depth over brevity (the card scrolls).
+ * Cached on the brief row — Claude is only called when there's no digest, the
+ * cached one is stale (> DIGEST_TTL_HOURS), or `force` is set. Never throws:
+ * falls back to the brief's own TL;DR summary.
+ *
+ * Returns { digest, digestAt, hasBriefToday, itemCount, generated, stale }.
+ */
+export async function buildDigest({ force = false } = {}) {
+  const brief = getBrief();                    // latest brief
+  const date = today();
+  if (!brief || brief.brief_date !== date) {
+    return { digest: null, digestAt: null, hasBriefToday: false, itemCount: 0, generated: false, stale: true };
+  }
+  const items = brief.items || [];
+  const fresh = brief.digest && hoursSince(brief.digest_at) < DIGEST_TTL_HOURS;
+  if (fresh && !force) {
+    return { digest: brief.digest, digestAt: brief.digest_at, hasBriefToday: true, itemCount: items.length, generated: false, stale: false };
+  }
+
+  // No stories (or no key) — the digest is just the brief's intro line.
+  if (!items.length || !process.env.ANTHROPIC_API_KEY) {
+    const text = brief.summary || 'No fresh stories matched your interests today.';
+    const saved = saveDigest(brief.id, text);
+    return { digest: text, digestAt: saved.digest_at, hasBriefToday: true, itemCount: items.length, generated: true, stale: false };
+  }
+
+  const interests = effectiveInterests();
+  const runId = startRun('brief', force ? 'manual' : 'on-demand');
+  try {
+    const stories = items.map((it, i) =>
+      `[${i + 1}] (${it.topic || 'general'}) ${it.headline}\n    ${it.summary || ''}`).join('\n\n');
+    // Prompt optimizes for: a SUBSTANTIVE daily read (not a skim) — bold
+    // topic-section headers (AI&Eng / Career / Learning), 2-4 concrete sentences
+    // per story with specifics + an actionable angle. Depth over brevity; the
+    // card scrolls. No metaphors, no essay "throughline" conclusions.
+    const res = await trackedCreate({
+      agent: 'brief', runId,
+      model: MODEL,
+      max_tokens: 1024,
+      system: `You are writing a personal morning brief the reader sits down to read with coffee — they want depth and specifics, not a skim. Their interests: AI, software/data engineering, landing an entry-level SWE/DA job right now, and learning/self-improvement.
+Structure the brief under bold topic headers — **AI & Engineering**, **Career**, **Learning** — including a header only when you have real material for it, and put each section on its own line separated by a blank line. Under each header, cover every story that has a genuine angle for that area; for each, write 2–4 sentences with concrete specifics (names, numbers, what is actually new), why it matters to someone with these interests, and any way they could act on it. Find a real, useful angle for as many of today's stories as you honestly can — skip only ones with no genuine connection to AI, engineering, career, or learning. Be specific and substantive (concrete facts beat vague framing) and plain-spoken: NO metaphors, NO essay-style "throughline"/"woven through" conclusions, NO closing summary. Use markdown bold for the headers only.`,
+      messages: [{ role: 'user', content: `Today's stories:\n\n${stories}` }],
+    });
+    const text = String(res.content[0].text || '').trim() || brief.summary || '';
+    const saved = saveDigest(brief.id, text);
+    finishRun(runId, { status: 'ok', summary: `digest synthesized from ${items.length} stories` });
+    return { digest: text, digestAt: saved.digest_at, hasBriefToday: true, itemCount: items.length, generated: true, stale: false };
+  } catch (e) {
+    console.error(`  [WARN] brief digest failed: ${e.message}`);
+    finishRun(runId, { status: 'error', error: e.message });
+    const text = brief.summary || 'Couldn’t synthesize the digest just now.';
+    const saved = saveDigest(brief.id, text);
+    return { digest: text, digestAt: saved.digest_at, hasBriefToday: true, itemCount: items.length, generated: true, stale: true };
   }
 }
 

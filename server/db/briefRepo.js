@@ -49,6 +49,13 @@ export function getBrief(date) {
   return { ...brief, items };
 }
 
+/** Cache the home-screen digest paragraph on a brief row (stamps digest_at). */
+export function saveDigest(briefId, digest) {
+  db.prepare("UPDATE morning_brief SET digest = ?, digest_at = datetime('now') WHERE id = ?")
+    .run(digest, briefId);
+  return db.prepare('SELECT digest, digest_at FROM morning_brief WHERE id = ?').get(briefId);
+}
+
 /**
  * The user's top interests, learned from the second brain: most-used note tags
  * plus active goal titles/categories. These become the news search terms — the

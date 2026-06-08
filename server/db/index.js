@@ -32,6 +32,12 @@ function ensureColumn(table, column, ddl) {
 ensureColumn('notes', 'parent_id', 'parent_id INTEGER REFERENCES notes(id)');
 ensureColumn('notes', 'is_concept', 'is_concept INTEGER NOT NULL DEFAULT 0');
 ensureColumn('notes', 'node_type', 'node_type TEXT');
+
+// Home digest: a Claude-written 3–4 sentence synthesis of the day's brief items,
+// cached on the brief row with its own timestamp so the home view re-calls Claude
+// only when the digest is stale (>6h) or the user forces a refresh.
+ensureColumn('morning_brief', 'digest', 'digest TEXT');
+ensureColumn('morning_brief', 'digest_at', 'digest_at TEXT');
 // backfill node_type for pre-existing rows from their kind (one-time, idempotent)
 db.exec(`UPDATE notes SET node_type = CASE kind
            WHEN 'project' THEN 'archivist' ELSE kind END

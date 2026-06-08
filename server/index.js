@@ -13,7 +13,7 @@ import projectsRouter from './routes/projects.js';
 import briefRouter from './routes/brief.js';
 import emailRouter from './routes/email.js';
 import calendarRouter from './routes/calendar.js';
-import overviewRouter from './routes/overview.js';
+import overviewRouter, { homeRouter } from './routes/overview.js';
 import observabilityRouter from './routes/observability.js';
 import researchRouter from './routes/research.js';
 import db, { DB_PATH } from './db/index.js';
@@ -44,6 +44,7 @@ app.use('/api/brief', briefRouter);
 app.use('/api/email', emailRouter);
 app.use('/api/calendar', calendarRouter);
 app.use('/api/overview', overviewRouter);
+app.use('/api/home', homeRouter);
 app.use('/api/observability', observabilityRouter);
 app.use('/api/research', researchRouter);
 
