@@ -1,52 +1,26 @@
-# Claude Code Handoff
+# Handoff
 
-Continuity note for the next session. Read `CLAUDE.md` (architecture) and `AGENTS.md` (Codex mirror) first; `master.html` is the design source of truth.
+Continuity note for the next session. Read **`CLAUDE.md`** (architecture, now current) and **`AGENTS.md`** (its Codex mirror) first; `master.html` is the design source of truth. This file is a short pointer — `CLAUDE.md` holds the full current state.
 
 ## Where things stand
 
-Phases 1–9 are built and live. This session was a large **UI/UX overhaul** plus two backend additions, all on the branch **`feat/ui-overhaul`** (not yet merged to `main`, not pushed).
+Phases 1–9 are built and live. Work is committed directly to **`main`** and pushed to `origin`. CLAUDE.md / AGENTS.md were rewritten to reflect current reality (they had drifted).
 
-### What changed this session
+## Recent direction (what changed most recently)
 
-**Home — rebuilt as a 5-zone command center** (`HomeView.jsx`, `GET /api/home` via `getHome()` in `overviewRepo.js` + `homeRouter`):
-- Zone 1 alert strip (urgent/actionable only, hidden when empty).
-- Zone 2 today's agenda — active goals with one-click check-in (now **compact single-line rows, bounded scroll** so the column fits without scrolling) + a **MiniCalendar month-grid widget** (source-colored chips, click-a-day popover, month nav, reads `/api/calendar`) + job deadlines.
-- Zone 3 morning-brief **digest** — a cached Claude-written read, now **4–6+ topic-labeled paragraphs** (**AI & Engineering / Career / Learning**), substantive and scannable (rewritten prompt in `morningBriefAgent.js` → `buildDigest()`; cached on `morning_brief.digest`/`digest_at`, regenerated only when stale >6h or forced via `POST /api/brief/digest`). Renders in a bounded `.digest-scroll`.
-- Zone 4 agent feed — full, filterable, archivist-collapsed; capped scroll.
-- Zone 5 agent-health cards — dot + last/next run + one real insight line.
+- **Job agent** — automation **off** (`JOB_AGENT_CRON_ENABLED = false`); manual **run now** only, with a compact `phase`+`pct` progress bar. **Lean scoring** (reason + missing skills, `max_tokens: 2500`) — the old structured role-summary output was removed for cost. Board split into **Found / Live applications / Inactive** (with derived **ghosted**), a per-company **♥ shortlist** heart, and a **new-this-scan** badge. **Settings → Job agent** edits locations / terms / résumés (via `app_settings` + `settingsRepo` + `routes/settings.js`).
+- **Email agent** — every 15 min; now **creates** applications from email (e.g. LinkedIn) when the company isn't tracked; promo "offer expires" mail no longer becomes a calendar deadline. The **agent rail** is individual, timestamped, expandable cards that deep-link to Gmail, with a last-scan line.
+- **Morning brief** — **topic-driven** from the Settings news tags (`brief_interests` + `QUERY_EXPANSIONS`), fetches real article bodies, runs 6/12/18.
+- **Archivist** — every 10 min; commits go to the **Projects changelog only**, no longer into the knowledge graph.
+- **Second brain** — graph curated to meaningful nodes (`isGraphWorthy` excludes commits + thin notes), force-tuned for a clean constellation.
+- **Research** — unsaved sessions are deletable.
 
-**Calendar & Email — true three-panel layout** (`CalendarView.jsx`, draggable dividers):
-- Full month calendar grid · paginated inbox (filter tabs all/urgent/important/job-alert/newsletter/noise + counts, noise hidden by default, expandable detail rows, cross-agent action badges) · agent communication rail (plain-language insight cards).
-- Backend: `emailRepo.listFlagsPaged`/`flagCounts`/`emailInsights`; `routes/email.js` gained `/counts`, `/insights`, paged `/flags` (legacy `?importance=` preserved).
+## Before pushing
 
-**Second Brain — split-pane graph** (`GraphView.jsx`):
-- Force graph + rich right node panel (slides in on click, draggable divider persisted in localStorage).
-- Weighted nodes by connection count; distinct color-by-type; **solid hierarchy vs dashed tag edges**; cluster-focus mode on concept click; search-highlight + node-type show/hide toggles.
-- Node names now show **on hover only** (no overlapping canvas labels), and forces are tuned (strong charge repulsion + loosened tag-link strength) so the graph spreads out instead of blobbing.
-- Right panel: type badge, full body (`/notes/:id`), clickable tags (→ filter)/parent/children/connected, date, source agent, close X.
+- Run the standard secret/PII audit (`git diff` for keys/passwords/tokens; confirm `.env`, `credentials.json`, Gmail token, `nexus.db`, résumés stay untracked).
+- **Audit screenshots for personal data.** They're generated from the live dashboard and may contain real inbox/calendar/jobs. The Found-by-agent job board and the graph (labels are hover-only) are safe; Home/Calendar/Goals/Live-applications would expose real data.
 
-**Goals + Accountability — merged into one tab** (`GoalsView.jsx`):
-- One tab: stat cards · goals list (add form, per-goal streak + progress, today's check-in done/partial/missed, **delete button**) · accountability nudge card.
-- `AccountabilityView.jsx` **deleted** (folded in). `App.jsx` drops the Accountability nav entry; the `accountability` route id is aliased to `GoalsView`; Home links repointed to `goals` in `overviewRepo.js`.
+## Watch / next
 
-**Other:**
-- Second-brain seed: `server/scripts/seed-second-brain.js` (`npm run seed:brain`, `--reset`) — concept hierarchy + tagged child nodes for a healthy demo graph. The owner intends to wipe seeds (`source_agent='seed'`) once real notes accumulate.
-- Demo tooling: `scripts/record-demos.mjs` (`npm run record:demos`, Playwright→ffmpeg) for optional future browser recordings, plus `scripts/shoot-screenshots.mjs` for refreshed tab screenshots.
-- README media uses the current full-screen PNG screenshots for the active tabs (Home, Job board, Second brain, Research, Journal, Goals, Calendar, Council, Projects, Settings). The first GIF pass was removed because the moving crops looked too busy; calmer GIFs should be recorded manually later if desired.
-- `docs/screenshots/*.png` refreshed to the new UI; `docs/gifs/` is reserved for future manual recordings.
-
-## Verification
-
-- `npm run build` green after every change.
-- All new endpoints verified live: `/api/home`, `/api/brief/digest` (synthesis + caching), `/api/email/{counts,insights,flags}` (paged/filtered), graph `/notes/:id`. Digest regen produced the new topic-labeled format. Add→delete goal cycle verified end-to-end (then cleaned up).
-- Earlier UI work was verified by build + endpoint contracts. The latest README media refresh verified file/link integrity locally; no new runtime behavior was changed.
-
-## ⚠️ Before pushing
-
-- **Audit README media for personal data before any public push.** The screenshots are generated from the local dashboard, so they may include real inbox/calendar/goals/jobs even when the README copy says demo data.
-- Run the standard secret/PII audit before any push (done for the code diff this session — clean).
-
-## Suggested next steps
-
-1. Owner: review/merge `feat/ui-overhaul`; decide on the home screenshot (above).
-2. Visually QA the graph force-tuning (charge `-280`, tag-link strength `0.035` in `GraphView.jsx`) and the three-panel calendar dividers in the browser.
+- `CLAUDE.md` → **Current Priorities** is the live list (Ask-Nexus query layer, first test suites, richer agents, …).
+- No test suites yet — first candidate when touching repos/agents/routes.
