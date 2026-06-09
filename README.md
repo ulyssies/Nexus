@@ -2,7 +2,7 @@
 
 *A local-first personal AI operating system — specialized agents that share one memory.*
 
-> **Nexus runs entirely on your machine.** A set of AI agents share one brain — a single SQLite file holding your notes, goals, journal, jobs, inbox, and projects — so each agent acts on what the others know. An interview email doesn't just get flagged; it moves your job application to "interviewing." A commit doesn't just get logged; it becomes a node in your knowledge graph.
+> **Nexus runs entirely on your machine.** A set of AI agents share one brain — a single SQLite file holding your notes, goals, journal, jobs, inbox, and projects — so each agent acts on what the others know. An interview email doesn't just get flagged; it moves your job application to "interviewing." Your journal's themes quietly steer what news the morning brief brings you.
 
 The shared context **is** the product. Most AI assistants are a handful of disconnected chatbots; Nexus is a set of agents reading and writing the same memory.
 
@@ -16,7 +16,7 @@ The shared context **is** the product. Most AI assistants are a handful of disco
 - **Council of 5** — five AI personas debate your decisions, challenge each other, and land on a consensus.
 - **Accountability** — tracks goals, keeps streaks, sends a nightly streak-aware nudge.
 - **Morning brief** — curates a short daily news read from topics you pick and interests it learns from your notes.
-- **Project archivist** — watches your repos and turns commits into plain-English memory and graph nodes.
+- **Project archivist** — watches your repos and turns commits into a plain-English changelog you can actually read.
 - **Observability** — every agent run and Claude call is instrumented; a Settings panel shows run history, errors, next run, and estimated spend.
 
 **Local-only by design.** Nexus runs on `localhost`, is never exposed publicly, and ships as a repo you clone and point at your own API keys. Filesystem and inbox access are exactly why it stays on your machine.
@@ -47,7 +47,7 @@ Filter by track / level / status / city / match floor; sort by newest, match, or
 
 ### Second brain — the knowledge graph
 
-Every note (journal entry, research node, or archivist commit summary) is a **node**; two notes that share a tag get an **edge** — a force-directed graph you can pan, zoom, and click. On top of that flat associative web sits an optional **hierarchy**: *concept* anchors with directed parent→child edges. This is the memory the council and morning brief read from.
+Every note (journal entry, research node, or concept) is a **node**; two notes that share a tag get an **edge** — a force-directed graph you can pan, zoom, and click. The graph is curated on purpose: only notes worth revisiting live here (routine commits go to the Projects changelog, not the graph), so every node is worth clicking. On top of that flat associative web sits an optional **hierarchy**: *concept* anchors with directed parent→child edges. This is the memory the council and morning brief read from.
 
 ![Second brain — the knowledge graph](docs/screenshots/graph.png)
 
@@ -83,7 +83,7 @@ Ask about a decision or just rant. Five personas — **Marcus** (control), **Lyr
 
 ### Projects — the archivist
 
-Per-repo cards with an AI-written change log. The **archivist** polls `git log` (and watches each repo's `.git/logs/HEAD`), summarizes each commit into `{summary, why, impact}`, and turns it into a **tagged second-brain node** — so project history connects to journal themes by shared tags. Filesystem reach is sandboxed to `WATCHED_PROJECTS`.
+Per-repo cards with an AI-written change log. The **archivist** polls `git log` (and watches each repo's `.git/logs/HEAD`) and summarizes each commit into `{summary, why, impact}`. Commits live here as a readable changelog — they're deliberately *not* poured into the knowledge graph (routine commits aren't worth revisiting). Filesystem reach is sandboxed to `WATCHED_PROJECTS`.
 
 ![Projects — the archivist](docs/screenshots/projects.png)
 
@@ -115,7 +115,7 @@ Two local processes, one shared database:
                           └──────────────────────────┘
 ```
 
-**How the agents work together (the whole point).** Because every agent shares `nexus.db`, work flows between them: a recruiter email flips `jobs.status` to `interviewing`; "due Friday" in an email becomes a calendar event; your journal tags teach the brief what to curate and ground the council's advice; each commit becomes a tagged graph node; and the home dashboard aggregates all of it. The frontend never touches the DB directly — the agents stay the single source of truth.
+**How the agents work together (the whole point).** Because every agent shares `nexus.db`, work flows between them: a recruiter email flips `jobs.status` to `interviewing`; "due Friday" in an email becomes a calendar event; your journal tags teach the brief what to curate and ground the council's advice; and the home dashboard aggregates all of it. The frontend never touches the DB directly — the agents stay the single source of truth.
 
 ---
 
@@ -174,7 +174,7 @@ Open **http://localhost:5173** — Vite proxies `/api` to the backend.
 | **Council of 5** | Live | Five personas answer in parallel, challenge each other, and a consensus score is computed. Reads journal + goals. |
 | **Accountability** | Live | Tracks goals, maintains streaks, sends a nightly streak-aware nudge. |
 | **Morning brief** | Live | Curates ~6–9 stories from your chosen news topics + interests learned from notes/goals. Needs `NEWS_API_KEY`. |
-| **Project archivist** | Live | Summarizes each commit into `project_changes` + a tagged second-brain node. Sandboxed to `WATCHED_PROJECTS`. |
+| **Project archivist** | Live | Summarizes each commit into `project_changes` (the Projects-tab changelog). Sandboxed to `WATCHED_PROJECTS`. |
 | **Tagging agent** | Live | Behind the scenes: auto-tags every new note, reusing existing tags so the graph stays connected. |
 | **Research agent** | Live | Chat sessions that distill into one structured second-brain node (summary, concepts, conclusions, open questions, sources). |
 | **Observability** | Live | The plumbing: instruments every run + Claude call into `agent_runs`/`agent_usage`, exposed via `GET /api/observability` and Settings. |
