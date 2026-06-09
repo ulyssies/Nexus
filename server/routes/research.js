@@ -1,7 +1,7 @@
 // Research agent API — sessions + chat + sources + distill-to-node, plus the
 // trackable open questions. Chat/save need an Anthropic key (clear 400 without).
 import { Router } from 'express';
-import { createSession, getSession, listSessions } from '../db/researchRepo.js';
+import { createSession, getSession, listSessions, deleteSession } from '../db/researchRepo.js';
 import { listOpenQuestions, resolveQuestion } from '../db/researchRepo.js';
 import { chat, addSource, saveSession } from '../agents/researchAgent.js';
 
@@ -22,6 +22,14 @@ router.get('/sessions/:id', (req, res) => {
   const session = getSession(Number(req.params.id));
   if (!session) return res.status(404).json({ error: 'session not found' });
   res.json({ session });
+});
+
+// DELETE /api/research/sessions/:id — remove an UNSAVED session (saved ones kept).
+router.delete('/sessions/:id', (req, res) => {
+  const r = deleteSession(Number(req.params.id));
+  if (r.reason === 'not_found') return res.status(404).json({ error: 'session not found' });
+  if (r.reason === 'saved') return res.status(409).json({ error: 'saved sessions cannot be deleted here' });
+  res.json({ deleted: true });
 });
 
 // POST /api/research/sessions/:id/message { message } — one chat turn.

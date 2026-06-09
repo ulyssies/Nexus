@@ -33,6 +33,20 @@ export function listSessions(limit = 30) {
       FROM research_sessions s ORDER BY s.updated_at DESC LIMIT ?`).all(limit);
 }
 
+/**
+ * Delete an UNSAVED research session and its messages. Saved sessions are kept
+ * (they produced a permanent knowledge node — deleting that is a separate action).
+ * Returns { deleted, reason }.
+ */
+export const deleteSession = db.transaction((id) => {
+  const s = db.prepare('SELECT status FROM research_sessions WHERE id = ?').get(id);
+  if (!s) return { deleted: false, reason: 'not_found' };
+  if (s.status === 'saved') return { deleted: false, reason: 'saved' };
+  db.prepare('DELETE FROM research_messages WHERE session_id = ?').run(id);
+  db.prepare('DELETE FROM research_sessions WHERE id = ?').run(id);
+  return { deleted: true };
+});
+
 const insertMessage = db.prepare(
   'INSERT INTO research_messages (session_id, role, content, meta) VALUES (@session_id, @role, @content, @meta)');
 const touch = db.prepare("UPDATE research_sessions SET updated_at = datetime('now') WHERE id = ?");

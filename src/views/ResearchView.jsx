@@ -58,6 +58,15 @@ export default function ResearchView() {
   }
   useEffect(() => { loadSessions(); loadParents(); }, []);
 
+  async function removeSession(id, e) {
+    e.stopPropagation();
+    try {
+      await api.deleteResearchSession(id);
+      if (activeId === id) { setActiveId(null); setSession(null); setSavedNode(null); }
+      loadSessions();
+    } catch (err) { setError(err.message); }
+  }
+
   async function makeConcept() {
     const title = newConcept.trim();
     if (!title) return;
@@ -200,10 +209,14 @@ export default function ResearchView() {
           <div className="journal-entries">
             {sessions.length === 0 && <p className="text-sm" style={{ color: 'var(--text-dim)' }}>No sessions yet.</p>}
             {sessions.map((s) => (
-              <div key={s.id} className={`entry-item${s.id === activeId ? ' active' : ''}`} style={{ cursor: 'pointer' }}
+              <div key={s.id} className={`entry-item${s.id === activeId ? ' active' : ''}`} style={{ cursor: 'pointer', position: 'relative' }}
                 onClick={() => { setActiveId(s.id); setSavedNode(null); }}>
                 <div className="entry-date">{fmt(s.updated_at)} · {s.message_count} msgs {s.status === 'saved' && '· ✓ saved'}</div>
                 <div className="entry-preview">{s.topic || 'untitled session'}</div>
+                {s.status !== 'saved' && (
+                  <button className="session-del" title="delete session" aria-label="delete session"
+                    onClick={(e) => removeSession(s.id, e)}>×</button>
+                )}
               </div>
             ))}
           </div>

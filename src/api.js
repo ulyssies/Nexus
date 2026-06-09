@@ -104,6 +104,7 @@ export const api = {
   researchSessions: () => get('/research/sessions'),
   researchSession: (id) => get(`/research/sessions/${id}`),
   newResearchSession: (topic) => post('/research/sessions', { topic }),
+  deleteResearchSession: (id) => del(`/research/sessions/${id}`),
   researchChat: (id, message) => post(`/research/sessions/${id}/message`, { message }),
   researchSource: (id, payload) => post(`/research/sessions/${id}/source`, payload),
   saveResearchSession: (id, parent_id) => post(`/research/sessions/${id}/save`, { parent_id }),
