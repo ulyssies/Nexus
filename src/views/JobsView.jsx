@@ -525,10 +525,17 @@ export default function JobsView() {
               {shortlistOn ? '× clear shortlist' : `★ Shortlist${shortlistCount ? ` (${shortlistCount})` : ''}`}
             </button>
             <button className="btn btn-primary" onClick={handleRun} disabled={running}>
-              {running ? `running · ${run?.step || '...'}` : 'run now'}
+              {running ? `running · ${run?.pct ?? 0}%` : 'run now'}
             </button>
           </div>
         </div>
+
+        {running && (
+          <div className="job-progress" title={run?.step || ''}>
+            <div className="job-progress-track"><div className="job-progress-fill" style={{ width: `${run?.pct ?? 0}%` }} /></div>
+            <span className="job-progress-label">{run?.phase || 'starting'} · {run?.pct ?? 0}%</span>
+          </div>
+        )}
 
         <div className="job-filter-bar">
           <label>track
@@ -624,7 +631,20 @@ export default function JobsView() {
                     data-job-row
                     onClick={() => setOpenId((id) => (id === j.id ? null : j.id))}
                   >
-                    <td><div className="job-company">{j.company}</div></td>
+                    <td>
+                      <div className="job-company">
+                        <button
+                          className={`job-heart${j.status === 'interested' ? ' on' : ''}`}
+                          disabled={updatingStatusId === j.id}
+                          title={j.status === 'interested' ? 'Remove from shortlist' : 'Add to shortlist'}
+                          aria-label={j.status === 'interested' ? 'Remove from shortlist' : 'Add to shortlist'}
+                          onClick={(e) => { e.stopPropagation(); setJobStatus(j.id, j.status === 'interested' ? 'new' : 'interested'); }}
+                        >
+                          {j.status === 'interested' ? '♥︎' : '♡︎'}
+                        </button>
+                        {j.company}
+                      </div>
+                    </td>
                     <td className="job-title-cell">
                       {j.isNew && <span className="badge" style={{ background: 'var(--success-dim, rgba(78,203,168,0.15))', color: 'var(--success)', marginRight: 6 }}>new</span>}
                       {j.title}

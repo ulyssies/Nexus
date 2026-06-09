@@ -144,7 +144,7 @@ async function fetchTheMuse(title) {
 const dedupKey = (j) => `${j.title}-${j.company}`.toLowerCase().replace(/\s+/g, '');
 
 /** Step 2 — fetch from all sources, dedup, and filter (seen / senior / age). */
-export async function fetchAllJobs({ cities = TARGET_CITIES, titles = JOB_TITLES, log = () => {} } = {}) {
+export async function fetchAllJobs({ cities = TARGET_CITIES, titles = JOB_TITLES, log = () => {}, onProgress = () => {} } = {}) {
   const seenJobs = getSeenJobKeys();
   const allJobs = [];
   const seen = new Set();
@@ -155,15 +155,20 @@ export async function fetchAllJobs({ cities = TARGET_CITIES, titles = JOB_TITLES
     }
   };
 
+  const total = cities.length * titles.length + titles.length * 2;   // adzuna + jobicy + muse
+  let done = 0;
+  const tick = () => onProgress(++done, total);
+
   for (const { city, adzunaRegion } of cities) {
     for (const title of titles) {
       log(`fetching ${title} · ${city}`);
       addJobs(await fetchAdzuna(title, city, adzunaRegion), city);
+      tick();
       await sleep(500);
     }
   }
-  for (const title of titles) { addJobs(await fetchJobicy(title), 'Remote'); await sleep(300); }
-  for (const title of titles) { addJobs(await fetchTheMuse(title), 'Various'); await sleep(300); }
+  for (const title of titles) { log(`fetching ${title} · Jobicy`); addJobs(await fetchJobicy(title), 'Remote'); tick(); await sleep(300); }
+  for (const title of titles) { log(`fetching ${title} · The Muse`); addJobs(await fetchTheMuse(title), 'Various'); tick(); await sleep(300); }
 
   const fresh = allJobs.filter((j) => !seenJobs.has(dedupKey(j)));
   const titleHasExcluded = (j) =>
@@ -193,7 +198,7 @@ For each job return ONLY a valid JSON array. No markdown, no explanation. Each o
 
 JSON array:`;
 
-async function scoreGroup(jobs, originalIndices, resume, label, log, runId) {
+async function scoreGroup(jobs, originalIndices, resume, label, log, runId, onBatch = () => {}) {
   const allScores = [];
   for (let i = 0; i < jobs.length; i += SCORE_BATCH_SIZE) {
     const batch = jobs.slice(i, i + SCORE_BATCH_SIZE);
@@ -227,13 +232,14 @@ async function scoreGroup(jobs, originalIndices, resume, label, log, runId) {
     } catch (e) {
       console.error(`  [WARN] Scoring error on [${label}] batch ${batchNum}: ${e.message}`);
     }
+    onBatch();
     if (i + SCORE_BATCH_SIZE < jobs.length) await sleep(300);
   }
   return allScores;
 }
 
 /** Step 3 — split DA/SWE, score each batch against its résumé. */
-export async function scoreJobs(jobs, { log = () => {}, runId = null } = {}) {
+export async function scoreJobs(jobs, { log = () => {}, runId = null, onProgress = () => {} } = {}) {
   const daResume = fs.readFileSync(RESUME_PATHS.da, 'utf-8');
   const sweResume = fs.readFileSync(RESUME_PATHS.swe, 'utf-8');
 
@@ -244,8 +250,13 @@ export async function scoreJobs(jobs, { log = () => {}, runId = null } = {}) {
     g.jobs.push(job); g.indices.push(i);
   });
 
-  const daScores = da.jobs.length ? await scoreGroup(da.jobs, da.indices, daResume, 'DA', log, runId) : [];
-  const sweScores = swe.jobs.length ? await scoreGroup(swe.jobs, swe.indices, sweResume, 'SWE', log, runId) : [];
+  // Total batches across both résumé groups so the bar advances smoothly.
+  const totalBatches = Math.ceil(da.jobs.length / SCORE_BATCH_SIZE) + Math.ceil(swe.jobs.length / SCORE_BATCH_SIZE);
+  let doneBatches = 0;
+  const onBatch = () => onProgress(++doneBatches, totalBatches || 1);
+
+  const daScores = da.jobs.length ? await scoreGroup(da.jobs, da.indices, daResume, 'DA', log, runId, onBatch) : [];
+  const sweScores = swe.jobs.length ? await scoreGroup(swe.jobs, swe.indices, sweResume, 'SWE', log, runId, onBatch) : [];
   return [...daScores, ...sweScores];
 }
 
@@ -314,7 +325,7 @@ async function sendEmailReport(matched) {
 }
 
 // ── run-state (guards overlap; the UI polls this) ─────────────────────────
-let state = { running: false, step: null, startedAt: null, finishedAt: null, summary: null, error: null, trigger: null };
+let state = { running: false, step: null, phase: null, pct: 0, startedAt: null, finishedAt: null, summary: null, error: null, trigger: null };
 export function getRunState() { return { ...state }; }
 
 /**
@@ -335,7 +346,10 @@ export async function runJobAgent({ trigger = 'manual', cities, titles, skipEmai
   }
 
   const log = (step) => { state.step = step; console.log(`  · ${step}`); };
-  state = { running: true, step: 'starting', startedAt: new Date().toISOString(), finishedAt: null, summary: null, error: null, trigger };
+  // phase + monotonic 0–100 percent for the UI progress bar (step stays the
+  // detailed line). Fetch ≈ 2–48%, scoring ≈ 50–92%, save/digest ≈ 95–99%.
+  const setProgress = (phase, pct) => { state.phase = phase; state.pct = Math.min(100, Math.max(state.pct || 0, Math.round(pct))); };
+  state = { running: true, step: 'starting', phase: 'starting', pct: 0, startedAt: new Date().toISOString(), finishedAt: null, summary: null, error: null, trigger };
   const t0 = Date.now();
   console.log(`\n[job-agent] run start (${trigger})`);
   const runId = startRun('job', trigger);
@@ -346,25 +360,27 @@ export async function runJobAgent({ trigger = 'manual', cities, titles, skipEmai
   const effTitles = titles || [...getJobTitles('da'), ...getJobTitles('swe')];
 
   try {
-    log('fetching listings');
-    const jobs = await fetchAllJobs({ cities: effCities, titles: effTitles, log });
+    log('fetching listings'); setProgress('fetching', 2);
+    const jobs = await fetchAllJobs({ cities: effCities, titles: effTitles, log,
+      onProgress: (d, t) => setProgress('fetching', 2 + (d / t) * 46) });
     console.log(`  [OK] ${jobs.length} new listings`);
 
     let written = 0;
     let matched = [];
     if (jobs.length) {
-      log('scoring matches');
-      const scores = await scoreJobs(jobs, { log, runId });
+      log('scoring matches'); setProgress('scoring', 50);
+      const scores = await scoreJobs(jobs, { log, runId,
+        onProgress: (d, t) => setProgress('scoring', 50 + (d / t) * 42) });
       const scored = scores.map((s) => ({ score: s, job: jobs[s.globalIndex] })).filter((r) => r.job);
 
-      log('saving to database');
+      log('saving to database'); setProgress('saving', 95);
       written = saveScoredJobs(scored);
 
       matched = scored
         .filter((r) => typeof r.score.matchPercent === 'number' && r.score.matchPercent >= MIN_MATCH_PERCENT)
         .map((r) => ({ ...r.score, ...r.job }));
 
-      if (!skipEmail) { log('sending digest'); await sendEmailReport(matched); }
+      if (!skipEmail) { log('sending digest'); setProgress('sending', 97); await sendEmailReport(matched); }
     }
 
     const totalInDb = db.prepare('SELECT COUNT(*) n FROM jobs').get().n;
@@ -377,14 +393,14 @@ export async function runJobAgent({ trigger = 'manual', cities, titles, skipEmai
       totalInDb,
       elapsedSec: Number(((Date.now() - t0) / 1000).toFixed(1)),
     };
-    state = { running: false, step: 'done', startedAt: state.startedAt, finishedAt: new Date().toISOString(), summary, error: null, trigger };
+    state = { running: false, step: 'done', phase: 'done', pct: 100, startedAt: state.startedAt, finishedAt: new Date().toISOString(), summary, error: null, trigger };
     console.log(`[job-agent] done in ${summary.elapsedSec}s — ${summary.written} written, ${summary.matches} matches`);
     finishRun(runId, { status: 'ok', summary: `${summary.written} written · ${summary.matches} matches · ${summary.scanned} scanned` });
     return summary;
   } catch (err) {
     console.error(`[job-agent] FAILED (${trigger}): ${err.message}`);
     finishRun(runId, { status: 'error', error: err.message });
-    state = { running: false, step: 'error', startedAt: state.startedAt, finishedAt: new Date().toISOString(), summary: null, error: err.message, trigger };
+    state = { running: false, step: 'error', phase: 'error', pct: state.pct || 0, startedAt: state.startedAt, finishedAt: new Date().toISOString(), summary: null, error: err.message, trigger };
     throw err;
   }
 }
