@@ -13,8 +13,10 @@ const TYPE_COLOR = {
   untagged: '#5a5a66',   // dim gray
 };
 const colorFor = (n) => (n.tags?.length || n.isConcept) ? (TYPE_COLOR[n.nodeType] || TYPE_COLOR.note) : TYPE_COLOR.untagged;
-// the four primary toggles (other types always show)
-const TYPE_FILTERS = ['journal', 'research', 'concept', 'archivist'];
+// the four primary toggles (other types always show). Commits live in the
+// Projects tab, not the graph — so the knowledge types are journal/research/
+// concept/note.
+const TYPE_FILTERS = ['journal', 'research', 'concept', 'note'];
 const SPLIT_KEY = 'nexus.graph.paneW';
 
 function hexA(hex, a) {
@@ -41,16 +43,17 @@ export default function GraphView() {
 
   useEffect(() => { api.noteGraph().then(setData).catch((e) => setError(e.message)); }, []);
 
-  // Spread the graph out: strong node repulsion + longer links, and loosen the
-  // dense shared-tag cliques (low link strength) so it isn't a tight blob.
+  // Spread into a clean constellation: strong, long-range repulsion pushes nodes
+  // apart, roomy links, and very loose shared-tag cliques (low strength) so dense
+  // tag groups breathe instead of collapsing into a blob.
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg || !data.nodes.length) return;
-    fg.d3Force('charge')?.strength(-280).distanceMax(600);
+    fg.d3Force('charge')?.strength(-360).distanceMax(750);
     const link = fg.d3Force('link');
     if (link) {
-      link.distance((l) => (l.kind === 'parent' ? 42 : 95));
-      link.strength((l) => (l.kind === 'parent' ? 0.55 : 0.035));
+      link.distance((l) => (l.kind === 'parent' ? 50 : 100));
+      link.strength((l) => (l.kind === 'parent' ? 0.6 : 0.09));
     }
     fg.d3ReheatSimulation?.();
   }, [data, size.w]);
@@ -131,7 +134,7 @@ export default function GraphView() {
   const exitFocus = () => setFocusRoot(null);
 
   const zoomBy = (f) => { const g = fgRef.current; if (g) g.zoom(g.zoom() * f, 250); };
-  const reset = () => { exitFocus(); fgRef.current?.zoomToFit(400, 60); };
+  const reset = () => { exitFocus(); fgRef.current?.zoomToFit(400, 90); };
 
   // ── divider drag (persisted) ────────────────────────────────────────────────
   function startDrag(e) {
@@ -155,7 +158,7 @@ export default function GraphView() {
   // ── canvas drawing ──────────────────────────────────────────────────────────
   const drawNode = useCallback((n, ctx, scale) => {
     const a = alphaOf(n);
-    const r = 2.2 + Math.sqrt(degree.get(n.id) || 1) * 1.7;   // weighted by connections
+    const r = 3.2 + Math.sqrt(degree.get(n.id) || 1) * 2.1;   // weighted by connections
     const col = colorFor(n);
     ctx.globalAlpha = a;
     ctx.beginPath();
@@ -242,12 +245,12 @@ export default function GraphView() {
               linkDirectionalArrowRelPos={1}
               onNodeClick={openNode}
               onBackgroundClick={() => { exitFocus(); }}
-              onEngineStop={() => fgRef.current?.zoomToFit(400, 60)}
+              onEngineStop={() => fgRef.current?.zoomToFit(400, 90)}
             />
           )}
 
           <div className="graph-legend">
-            {[['journal', '#5b9cf6'], ['research', '#3fc7b4'], ['concept / parent', '#e0b050'], ['archivist', '#5fb56a'], ['untagged', '#5a5a66']].map(([l, c]) => (
+            {[['journal', '#5b9cf6'], ['research', '#3fc7b4'], ['concept / parent', '#e0b050'], ['note', '#8a87f0'], ['untagged', '#5a5a66']].map(([l, c]) => (
               <div className="legend-row" key={l}><div className="legend-dot" style={{ background: c }} />{l}</div>
             ))}
             <div className="legend-row" style={{ marginTop: 4, color: 'var(--text-dim)' }}>

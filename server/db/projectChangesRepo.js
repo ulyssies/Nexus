@@ -12,7 +12,6 @@
 //  notes flow through the same tagging/graph path as journal entries.
 // ============================================================
 import db from './index.js';
-import { createNote } from './notesRepo.js';
 
 const insertChange = db.prepare(`
   INSERT INTO project_changes
@@ -39,23 +38,14 @@ export function recordChange({
   if (!summary || !String(summary).trim()) throw new Error('change summary is required');
   if (commit_hash && hasCommit(project_name, commit_hash)) return null;
 
-  // graph node first so we can link it; body = the readable story of the change
-  const noteBody = [
-    `${project_name}${commit_hash ? ` · ${commit_hash.slice(0, 7)}` : ''}`,
-    summary,
-    why ? `Why: ${why}` : null,
-    impact ? `Impact: ${impact}` : null,
-  ].filter(Boolean).join('\n');
-  const note = createNote({
-    title: `${project_name}: ${summary.slice(0, 60)}`,
-    body: noteBody,
-    kind: 'project',
-    source_agent: 'archivist',
-  });
-
+  // Commits are recorded ONLY in project_changes (the Projects-tab changelog).
+  // They are deliberately NOT mirrored into the second-brain graph anymore —
+  // routine commits ("fix branch issue") aren't knowledge worth revisiting, and
+  // they used to flood the graph. Memorialize a real milestone with a journal
+  // note instead. (note_id stays null.)
   const info = insertChange.run({
     project_name, project_path, change_type, commit_hash,
-    summary, why, impact, diff_stat, note_id: note.id, changed_at,
+    summary, why, impact, diff_stat, note_id: null, changed_at,
   });
   if (!info.changes) return null; // lost a race; conflict ignored
   return db.prepare('SELECT * FROM project_changes WHERE id = ?').get(info.lastInsertRowid);

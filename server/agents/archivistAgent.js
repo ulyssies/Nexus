@@ -24,8 +24,6 @@ import chokidar from 'chokidar';
 import { trackedCreate, startRun, finishRun } from './claudeClient.js';
 import { WATCHED_PROJECTS } from '../config.js';
 import { recordChange, hasCommit } from '../db/projectChangesRepo.js';
-import { setNoteTags, getAllTagNames } from '../db/notesRepo.js';
-import { tagNote } from './tagAgent.js';
 
 const MODEL = 'claude-sonnet-4-6'; // change synthesis — judgement, but routine → Sonnet
 const EMPTY_TREE = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'; // git's canonical empty tree (root-commit diffs)
@@ -123,18 +121,9 @@ export async function scanProject(project, trigger = 'cron') {
         diff_stat: stat.files ? `${stat.files} files, +${stat.insertions}/-${stat.deletions}` : null,
         changed_at: commit.date,
       });
-      if (row) {
-        recorded += 1;
-        // Tag the change's graph node so project work connects to journal themes
-        // via shared tags (the "archivist feeds the second brain" link). Reuses
-        // existing tags to keep the graph connected; best-effort, no key → no-op.
-        try {
-          const { tags } = await tagNote({ title: project.name, body: `${summary}\n${why || ''}\n${impact || ''}` }, getAllTagNames(), { runId });
-          if (tags.length) setNoteTags(row.note_id, tags);
-        } catch (e) {
-          console.error(`  [WARN] archivist tagging failed (${project.name}): ${e.message}`);
-        }
-      }
+      // Commits are recorded to project_changes only (the Projects-tab changelog),
+      // not mirrored into the second-brain graph — so no graph note to tag here.
+      if (row) recorded += 1;
     }
     finishRun(runId, { status: 'ok', summary: `${project.name}: recorded ${recorded} change${recorded === 1 ? '' : 's'}` });
     return { project: project.name, recorded };

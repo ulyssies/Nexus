@@ -138,11 +138,25 @@ export function listNotes({ kind = null, limit = 100 } = {}) {
 //   The frontend renders the two differently (directed flag).
 // Color is keyed by node_type so research/concept nodes are visually distinct.
 const NODE_COLOR = { journal: '#9d8cff', note: '#6ea8fe', archivist: '#7c6fe0', brief: '#f0a050', research: '#4ecba8', concept: '#e0b050' };
+// A node earns a place in the knowledge graph only if it's worth revisiting.
+// Concepts (anchors) always qualify; dev-commit nodes (archivist/project) belong
+// in the Projects-tab changelog, not here; and anything too thin to carry a
+// thought ("good day, did SQL") is left out so every node is worth clicking.
+const GRAPH_MIN_BODY = 60;
+function isGraphWorthy(n) {
+  if (n.is_concept) return true;
+  const type = n.node_type || n.kind;
+  if (type === 'archivist' || type === 'project') return false;
+  return (n.body || '').trim().length >= GRAPH_MIN_BODY;
+}
+
 export function getGraph() {
-  const notes = db.prepare('SELECT id, kind, node_type, parent_id, is_concept, title, body, created_at FROM notes ORDER BY created_at DESC').all();
+  const allNotes = db.prepare('SELECT id, kind, node_type, parent_id, is_concept, title, body, created_at FROM notes ORDER BY created_at DESC').all();
+  const notes = allNotes.filter(isGraphWorthy);
+  const keptIds = new Set(notes.map((n) => n.id));
   const tagRows = db.prepare(`
     SELECT nt.note_id, t.id AS tag_id, t.name, t.color FROM note_tags nt
-    JOIN tags t ON t.id = nt.tag_id`).all();
+    JOIN tags t ON t.id = nt.tag_id`).all().filter((r) => keptIds.has(r.note_id));
 
   const tagsByNote = new Map();
   const notesByTag = new Map();
