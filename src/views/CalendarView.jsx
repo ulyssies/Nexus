@@ -13,6 +13,27 @@ function fmtDate(ts) {
   const d = parseTs(ts); if (!d) return '';
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
+// "just now" / "5m ago" / "2h ago" / "3d ago" / "Jun 2"
+function relTime(ts) {
+  const d = parseTs(ts); if (!d) return '';
+  const mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.round(hrs / 24);
+  return days <= 7 ? `${days}d ago` : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+// open a specific message in the user's Gmail web client (read-only deep link)
+const gmailLink = (messageId) => `https://mail.google.com/mail/u/0/#all/${messageId}`;
+// Gmail snippets come HTML-entity-encoded — decode for readable display.
+function decodeEntities(s) {
+  return String(s || '')
+    .replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+    .replace(/[‌‍͏­]/g, '').trim();   // strip zero-width padding
+}
 
 // per-source accent + label for an event's origin
 const SOURCE = {
@@ -31,6 +52,7 @@ function MonthGrid({ events }) {
   const now = new Date();
   const [view, setView] = useState(new Date(now.getFullYear(), now.getMonth(), 1));
   const [selected, setSelected] = useState(dayKey(now));
+  const [openEv, setOpenEv] = useState(null);          // expanded day-event id
 
   const byDay = {};
   for (const e of events) { const d = parseTs(e.start_at); if (d) (byDay[dayKey(d)] ||= []).push(e); }
@@ -45,6 +67,15 @@ function MonthGrid({ events }) {
 
   const shift = (n) => { setSelected(null); setView(new Date(year, month + n, 1)); };
   const selEvents = selected ? (byDay[selected] || []) : [];
+
+  // upcoming events across all months (from ~now), so the panel tells you what's
+  // ahead without clicking each day. Click one to jump the grid to its day.
+  const upcoming = events
+    .map((e) => ({ e, d: parseTs(e.start_at) }))
+    .filter((x) => x.d && x.d.getTime() >= Date.now() - 3600_000)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 8);
+  const jumpTo = (d) => { setView(new Date(d.getFullYear(), d.getMonth(), 1)); setSelected(dayKey(d)); };
 
   return (
     <div className="cal-grid-wrap">
@@ -80,15 +111,45 @@ function MonthGrid({ events }) {
         {selected && selEvents.length === 0 && <div className="cal-day-empty">No events.</div>}
         {selEvents.map((e) => {
           const s = SOURCE[e.source_agent] || SOURCE.user;
+          const isOpen = openEv === e.id;
+          const blurb = e.email_snippet || e.description;
           return (
-            <div className="cal-day-event" key={e.id} style={{ borderLeftColor: s.color }}>
+            <button className="cal-day-event" key={e.id} style={{ borderLeftColor: s.color }}
+              onClick={() => setOpenEv(isOpen ? null : e.id)}>
               <div className="cal-day-event-time">{evTime(e.start_at, e.all_day)}</div>
               <div className="cal-day-event-title">{e.title}</div>
               <div className="cal-day-event-src" style={{ color: s.color }}>{s.label}</div>
-            </div>
+              {isOpen && (
+                <div className="cal-ev-detail">
+                  <p className="cal-ev-blurb">{blurb ? decodeEntities(blurb) : 'No description for this event.'}</p>
+                  {e.gmail_message_id && (
+                    <a className="mail-open" href={gmailLink(e.gmail_message_id)} target="_blank" rel="noreferrer" onClick={(ev) => ev.stopPropagation()}>open email in Gmail →</a>
+                  )}
+                </div>
+              )}
+            </button>
           );
         })}
       </div>
+
+      {/* Upcoming is an overview/fallback — hide it when the selected day already
+          shows its own events, so we don't repeat the same event twice. */}
+      {selEvents.length === 0 && (
+      <div className="cal-upcoming">
+        <div className="cal-up-title">upcoming · next {upcoming.length}</div>
+        {upcoming.length === 0 && <div className="cal-day-empty">Nothing scheduled ahead.</div>}
+        {upcoming.map(({ e, d }) => {
+          const s = SOURCE[e.source_agent] || SOURCE.user;
+          return (
+            <button key={e.id} className="cal-up-row" style={{ borderLeftColor: s.color }} onClick={() => jumpTo(d)}>
+              <span className="cal-up-when">{d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} · {evTime(e.start_at, e.all_day)}</span>
+              <span className="cal-up-name">{e.title}</span>
+              <span className="cal-up-src" style={{ color: s.color }}>{s.label}</span>
+            </button>
+          );
+        })}
+      </div>
+      )}
 
       <div className="cal-legend">
         {['email', 'job', 'user'].map((s) => (
@@ -145,14 +206,18 @@ function Inbox({ counts, onChange }) {
               </button>
               {isOpen && (
                 <div className="mail-detail">
-                  {f.snippet && <p className="mail-snippet">{f.snippet}</p>}
+                  {f.snippet && <p className="mail-snippet">{decodeEntities(f.snippet)}</p>}
                   <div className="mail-facts">
                     <span><b>importance</b> {f.importance}</span>
                     <span><b>category</b> {f.category || '—'}</span>
                     <span><b>from</b> {f.sender_email || f.sender || '—'}</span>
+                    <span><b>received</b> {relTime(f.received_at)}</span>
                     {f.deadline_at && <span><b>deadline</b> {fmtDate(f.deadline_at)}</span>}
                     <span><b>action</b> {action || 'none'}</span>
                   </div>
+                  {f.gmail_message_id && (
+                    <a className="mail-open" href={gmailLink(f.gmail_message_id)} target="_blank" rel="noreferrer">open email in Gmail →</a>
+                  )}
                 </div>
               )}
             </div>
@@ -179,6 +244,8 @@ export default function CalendarView() {
   const [events, setEvents] = useState([]);
   const [counts, setCounts] = useState({});
   const [insights, setInsights] = useState([]);
+  const [rail, setRail] = useState({ lastScan: null, triaged: 0, urgent: 0 });
+  const [openIdx, setOpenIdx] = useState(null);        // expanded agent-rail card
   const [gmail, setGmail] = useState(null);
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -190,7 +257,7 @@ export default function CalendarView() {
   function load() {
     api.calendar(true).then((r) => setEvents(r.events || [])).catch((e) => setError(e.message));
     api.emailCounts().then((r) => setCounts(r.counts || {})).catch(() => {});
-    api.emailInsights().then((r) => setInsights(r.insights || [])).catch(() => {});
+    api.emailInsights().then((r) => { setInsights(r.insights || []); setRail({ lastScan: r.lastScan, triaged: r.triaged, urgent: r.urgent }); }).catch(() => {});
     api.emailStatus().then(setGmail).catch(() => {});
   }
   useEffect(() => { load(); }, []);
@@ -271,14 +338,38 @@ export default function CalendarView() {
 
         <section className="tri-col" style={{ width: `${cols[2]}%` }}>
           <div className="tri-title">agent rail <span style={{ color: 'var(--text-dim)', fontWeight: 400 }}>· what the email agent noticed</span></div>
+          <div className="insight-scanline">
+            <span>last scan · <b style={{ color: 'var(--text-secondary)' }}>{rail.lastScan ? relTime(rail.lastScan) : 'never'}</b></span>
+            <span>{rail.triaged} triaged{rail.urgent ? ` · ${rail.urgent} urgent` : ''}</span>
+          </div>
           <div className="tri-body">
             {insights.length === 0 && <p className="cal-day-empty">No insights yet — run a scan.</p>}
-            {insights.map((it, i) => (
-              <div className="insight-card" key={i} style={{ borderLeftColor: INSIGHT_COLOR[it.kind] || 'var(--text-dim)' }}>
-                <span className="insight-kind" style={{ color: INSIGHT_COLOR[it.kind] || 'var(--text-dim)' }}>{it.kind}</span>
-                <p className="insight-text">{it.text}</p>
-              </div>
-            ))}
+            {insights.map((it, i) => {
+              const col = INSIGHT_COLOR[it.kind] || 'var(--text-dim)';
+              const href = it.messageId ? gmailLink(it.messageId) : null;
+              const expandable = !!(it.snippet || href);
+              const isOpen = openIdx === i;
+              return (
+                <div key={i} className={`insight-card${expandable ? ' link' : ''}`} style={{ borderLeftColor: col }}
+                  onClick={() => expandable && setOpenIdx(isOpen ? null : i)}>
+                  <div className="insight-top">
+                    <span className="insight-kind" style={{ color: col }}>{it.kind}</span>
+                    {it.receivedAt && <span className="insight-when">{relTime(it.receivedAt)}</span>}
+                  </div>
+                  <p className="insight-text">{it.title || it.text}</p>
+                  {it.detail && <p className="insight-sub">{it.detail}</p>}
+                  {isOpen && (
+                    <div className="insight-expand">
+                      {it.snippet
+                        ? <p className="insight-snippet">{decodeEntities(it.snippet)}</p>
+                        : <p className="insight-snippet dim">No preview text for this email.</p>}
+                      {it.sender && <p className="insight-from">from {it.sender}</p>}
+                      {href && <a className="insight-open" href={href} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}>open email in Gmail →</a>}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       </div>

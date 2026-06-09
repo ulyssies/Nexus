@@ -1,7 +1,7 @@
 // Email agent API — read the triaged flags + Gmail auth status + manual run.
 // All reads are local; POST /run hits Gmail (read-only) + Claude.
 import { Router } from 'express';
-import { listFlags, listFlagsPaged, flagCounts, flagStats, emailInsights } from '../db/emailRepo.js';
+import { listFlags, listFlagsPaged, flagCounts, flagStats, emailInsights, emailRailMeta } from '../db/emailRepo.js';
 import { runEmailAgent, gmailStatus } from '../agents/emailAgent.js';
 
 const router = Router();
@@ -16,7 +16,7 @@ router.get('/stats', (_req, res) => res.json(flagStats()));
 router.get('/counts', (_req, res) => res.json({ counts: flagCounts() }));
 
 // GET /api/email/insights — plain-language agent rail (derived, read-only).
-router.get('/insights', (_req, res) => res.json({ insights: emailInsights() }));
+router.get('/insights', (_req, res) => res.json({ insights: emailInsights(), ...emailRailMeta() }));
 
 // GET /api/email/flags — paginated, filtered inbox.
 //   ?filter=all|urgent|important|job-alert|newsletter|noise &page=1 &pageSize=25

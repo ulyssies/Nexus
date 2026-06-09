@@ -121,55 +121,77 @@ function whenLabel(ts) {
   return new Date(t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+const clip = (s, n) => { const t = String(s || ''); return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
+const clock = (ts) => new Date(epochMs(ts)).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+
+/**
+ * The agent rail: INDIVIDUAL, actionable cards (not aggregated counts) — each
+ * carries the source email's gmail_message_id (so the UI can deep-link to it),
+ * its received time, and a deadline time where relevant. Ordered most-actionable
+ * first: deadlines → urgent → recruiters → cross-agent actions → a volume note.
+ */
 export function emailInsights() {
   const out = [];
 
-  // 1) deadlines the agent extracted into the calendar (most actionable first)
-  for (const e of db.prepare(
-    "SELECT title, start_at FROM calendar_events WHERE source_agent = 'email' AND start_at >= datetime('now','-1 day') ORDER BY start_at ASC LIMIT 6"
-  ).all()) {
-    out.push({ kind: 'deadline', text: `${e.title} — ${whenLabel(e.start_at)} (${new Date(epochMs(e.start_at)).toLocaleString('en-US', { weekday: 'short', hour: 'numeric', minute: '2-digit' })}).`, at: e.start_at });
+  // 1) deadlines the agent extracted (most actionable) — link back to the email.
+  // Excludes promo/noise sources so marketing "offer expires" junk never shows.
+  for (const e of db.prepare(`
+    SELECT c.title, c.start_at, f.gmail_message_id AS mid, f.received_at AS recv, f.sender, f.snippet AS snip
+      FROM calendar_events c
+      LEFT JOIN email_flags f ON f.id = c.source_ref
+     WHERE c.source_agent = 'email' AND c.start_at >= datetime('now','-1 day')
+       AND (f.importance IS NULL OR f.importance != 'noise')
+       AND (f.category IS NULL OR f.category NOT LIKE '%promo%')
+     ORDER BY c.start_at ASC LIMIT 8`).all()) {
+    out.push({ kind: 'deadline', title: e.title, detail: `${whenLabel(e.start_at)} · ${clock(e.start_at)}`, sender: e.sender, snippet: e.snip, at: e.start_at, receivedAt: e.recv, messageId: e.mid });
   }
-  // deadlines still only on the flag (not yet a calendar event)
-  for (const f of db.prepare(
-    `SELECT subject, sender, deadline_at FROM email_flags WHERE deadline_at IS NOT NULL
-       AND deadline_at >= datetime('now','-1 day')
+  for (const f of db.prepare(`
+    SELECT subject, sender, deadline_at, gmail_message_id AS mid, received_at AS recv, snippet AS snip FROM email_flags
+     WHERE deadline_at IS NOT NULL AND deadline_at >= datetime('now','-1 day')
+       AND importance != 'noise' AND (category IS NULL OR category NOT LIKE '%promo%')
        AND NOT EXISTS (SELECT 1 FROM calendar_events c WHERE c.source_agent='email' AND c.start_at = email_flags.deadline_at)
-     ORDER BY deadline_at ASC LIMIT 4`
-  ).all()) {
-    out.push({ kind: 'deadline', text: `Deadline ${whenLabel(f.deadline_at)} — from ${f.sender || 'an email'}: “${String(f.subject || '').slice(0, 50)}”.`, at: f.deadline_at });
+     ORDER BY deadline_at ASC LIMIT 5`).all()) {
+    out.push({ kind: 'deadline', title: clip(f.subject, 52), detail: `${whenLabel(f.deadline_at)} · ${clock(f.deadline_at)}`, sender: f.sender, snippet: f.snip, at: f.deadline_at, receivedAt: f.recv, messageId: f.mid });
   }
 
-  // 2) urgent items flagged this scan
-  const urgent = db.prepare("SELECT subject, sender FROM email_flags WHERE importance = 'urgent' ORDER BY received_at DESC LIMIT 3").all();
-  if (urgent.length) {
-    out.push({ kind: 'urgent', text: `${urgent.length} urgent email${urgent.length === 1 ? '' : 's'} flagged — ${urgent.map((u) => u.sender || 'unknown').join(', ')}.`, at: null });
+  // 2) urgent — one card each
+  for (const u of db.prepare("SELECT subject, sender, received_at AS recv, gmail_message_id AS mid, snippet AS snip FROM email_flags WHERE importance = 'urgent' ORDER BY received_at DESC LIMIT 6").all()) {
+    out.push({ kind: 'urgent', title: clip(u.subject, 52), detail: u.sender || 'unknown sender', sender: u.sender, snippet: u.snip, at: null, receivedAt: u.recv, messageId: u.mid });
   }
 
-  // 3) recruiters / job alerts
-  const recruiters = db.prepare("SELECT DISTINCT sender FROM email_flags WHERE category LIKE '%recruit%' AND sender IS NOT NULL LIMIT 4").all().map((r) => r.sender);
-  if (recruiters.length) {
-    out.push({ kind: 'job', text: `${recruiters.length} recruiter${recruiters.length === 1 ? '' : 's'} reached out — ${recruiters.join(', ')}.`, at: null });
+  // 3) recruiters reaching out — one card each (reply-worthy)
+  for (const r of db.prepare("SELECT subject, sender, received_at AS recv, gmail_message_id AS mid, snippet AS snip FROM email_flags WHERE category LIKE '%recruit%' ORDER BY received_at DESC LIMIT 5").all()) {
+    out.push({ kind: 'job', title: clip(r.subject, 50), detail: `recruiter · ${r.sender || 'unknown'}`, sender: r.sender, snippet: r.snip, at: null, receivedAt: r.recv, messageId: r.mid });
   }
-  const jobAlerts = db.prepare("SELECT COUNT(*) n FROM email_flags WHERE category LIKE '%job%' OR category LIKE '%application%'").get().n;
+
+  // 4) cross-agent actions the agent took — one card each
+  for (const f of db.prepare("SELECT subject, sender, action_taken, received_at AS recv, gmail_message_id AS mid, snippet AS snip FROM email_flags WHERE action_taken IS NOT NULL ORDER BY received_at DESC LIMIT 5").all()) {
+    const act = String(f.action_taken).replace('updated_job_status:', 'job → ').replace('created_application:', 'tracked → ');
+    out.push({ kind: 'action', title: clip(f.subject, 48), detail: act, sender: f.sender, snippet: f.snip, at: null, receivedAt: f.recv, messageId: f.mid });
+  }
+
+  // 5) job-alert volume (not individually actionable) — one summary card
+  const jobAlerts = db.prepare("SELECT COUNT(*) n FROM email_flags WHERE category LIKE '%job%' OR category LIKE '%alert%' OR category LIKE '%application%'").get().n;
   if (jobAlerts) {
-    const top = db.prepare("SELECT sender, COUNT(*) n FROM email_flags WHERE category LIKE '%job%' OR category LIKE '%application%' GROUP BY sender ORDER BY n DESC LIMIT 1").get();
-    out.push({ kind: 'job', text: `${jobAlerts} job alert${jobAlerts === 1 ? '' : 's'} in your inbox${top?.sender ? ` — mostly from ${top.sender}` : ''}.`, at: null });
+    const top = db.prepare("SELECT sender, COUNT(*) n FROM email_flags WHERE category LIKE '%job%' OR category LIKE '%alert%' OR category LIKE '%application%' GROUP BY sender ORDER BY n DESC LIMIT 1").get();
+    out.push({ kind: 'info', title: `${jobAlerts} job alerts in your inbox`, detail: top?.sender ? `mostly from ${top.sender}` : '', sender: null, at: null, receivedAt: null, messageId: null });
   }
 
-  // 4) cross-agent job-status flips the agent made
-  for (const f of db.prepare(
-    "SELECT subject, action_taken FROM email_flags WHERE action_taken IS NOT NULL ORDER BY received_at DESC LIMIT 3"
-  ).all()) {
-    out.push({ kind: 'action', text: `Acted on the job board: ${String(f.action_taken).replace('updated_job_status:', 'set application → ')} (from “${String(f.subject || '').slice(0, 40)}”).`, at: null });
-  }
-
-  // 5) volume note when nothing else is pressing
   if (!out.length) {
     const total = db.prepare('SELECT COUNT(*) n FROM email_flags').get().n;
-    out.push({ kind: 'info', text: total ? `Triaged ${total} emails — nothing urgent right now.` : 'No emails triaged yet — run a scan to start.', at: null });
+    out.push({ kind: 'info', title: total ? `Triaged ${total} emails` : 'No emails triaged yet', detail: total ? 'nothing pressing right now' : 'run a scan to start', sender: null, at: null, receivedAt: null, messageId: null });
   }
   return out;
+}
+
+/** Rail metadata: when the email agent last scanned, and how much it has triaged. */
+export function emailRailMeta() {
+  const lastScan = db.prepare("SELECT MAX(COALESCE(finished_at, started_at)) v FROM agent_runs WHERE agent = 'email' AND status = 'ok'").get()?.v
+    || db.prepare('SELECT MAX(received_at) v FROM email_flags').get()?.v
+    || null;
+  const triaged = db.prepare('SELECT COUNT(*) n FROM email_flags').get().n;
+  const urgent = db.prepare("SELECT COUNT(*) n FROM email_flags WHERE importance = 'urgent'").get().n;
+  return { lastScan, triaged, urgent };
 }
 
 // ── calendar_events (also written by the email agent: extracted deadlines) ────
@@ -194,14 +216,19 @@ export function addCalendarEvent(ev) {
 }
 
 /** Upcoming events (today onward), soonest first — the calendar's "upcoming". */
+// Email-sourced events also carry the source email's snippet + message id so the
+// UI can show a brief description and deep-link to Gmail.
+const EVENT_SELECT = `
+  SELECT c.*, f.snippet AS email_snippet, f.gmail_message_id AS gmail_message_id, f.sender AS email_sender
+    FROM calendar_events c
+    LEFT JOIN email_flags f ON f.id = c.source_ref AND c.source_agent = 'email'`;
+
 export function listUpcomingEvents(limit = 50) {
-  return db.prepare(
-    "SELECT * FROM calendar_events WHERE start_at >= datetime('now','-1 day') ORDER BY start_at ASC LIMIT ?"
-  ).all(limit);
+  return db.prepare(`${EVENT_SELECT} WHERE c.start_at >= datetime('now','-1 day') ORDER BY c.start_at ASC LIMIT ?`).all(limit);
 }
 
 export function listAllEvents(limit = 200) {
-  return db.prepare('SELECT * FROM calendar_events ORDER BY start_at ASC LIMIT ?').all(limit);
+  return db.prepare(`${EVENT_SELECT} ORDER BY c.start_at ASC LIMIT ?`).all(limit);
 }
 
 // ── cross-agent bridge into jobs ──────────────────────────────────────────────

@@ -76,7 +76,7 @@ async function classify(messages, runId = null) {
     system: `You triage a job-seeker's inbox. For each email, decide:
 - importance: "urgent" (needs action today / time-sensitive), "important" (matters, not urgent), "normal", or "noise" (newsletters, promos, automated).
 - category: a short freeform label (e.g. "interview", "application", "recruiter", "newsletter", "billing").
-- deadline: if the email states a concrete deadline/appointment, an ISO 8601 datetime; else null. deadlineTitle: a short title for it, else null.
+- deadline: ONLY if the email requires YOU to personally act by a specific date — an appointment, interview, application deadline, RSVP, or a bill/payment due date. An ISO 8601 datetime; else null. Do NOT treat marketing or promotional expirations as deadlines ("offer expires", "sale ends", "deal ends soon", coupons, free-credit/bonus promos, limited-time discounts) — those are null. deadlineTitle: a short title for it, else null.
 - company: if this is about a JOB APPLICATION at a company, the company name; else null.
 - role: if this is about a job application AND a specific job title is mentioned, that title; else null.
 - statusSignal: the application movement this email implies — "applied" (you submitted / application received confirmation), "interviewing" (interview invite/scheduling), "offer", "rejected", or "none".
@@ -171,8 +171,11 @@ export async function runEmailAgent({ trigger = 'cron', scanCount, reprocess = f
     });
     flagged += 1;
 
-    // extracted deadline → calendar event linked back to this flag
-    if (c.deadline) {
+    // extracted deadline → calendar event linked back to this flag, but ONLY for
+    // mail that actually matters. Promo/noise "offer expires" junk never makes the
+    // calendar (it buried real deadlines + urgent items like payment failures).
+    const promoish = c.importance === 'noise' || /promo|sale|newsletter|offer|deal|coupon|marketing|discount/i.test(c.category || '');
+    if (c.deadline && !promoish) {
       addCalendarEvent({
         title: c.deadlineTitle || msg.subject || 'Deadline',
         description: `From ${msg.sender}: ${msg.subject}`,
