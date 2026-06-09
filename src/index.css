@@ -553,6 +553,12 @@ html, body {
   margin-bottom: 12px;
 }
 
+/* compact run-progress: one thin line under the header, only while scanning */
+.job-progress { display: flex; align-items: center; gap: 10px; margin: -2px 0 12px; }
+.job-progress-track { flex: 1; height: 4px; background: var(--bg-raised); border-radius: 2px; overflow: hidden; }
+.job-progress-fill { height: 100%; background: var(--job); border-radius: 2px; transition: width 0.4s ease; }
+.job-progress-label { font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); white-space: nowrap; min-width: 96px; text-align: right; text-transform: capitalize; }
+
 .job-subtabs {
   display: inline-flex;
   align-items: center;
@@ -661,7 +667,17 @@ html, body {
 .job-table.interactive tbody tr.job-click-row { cursor: pointer; }
 .job-table.interactive tbody tr.job-click-row.open td { background: var(--bg-raised); }
 .job-table.interactive tbody tr.job-click-row.grouped td:first-child { padding-left: 28px; }
-.job-company { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.job-company { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.job-heart {
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; background: none; border: none; padding: 0; cursor: pointer;
+  font-size: 13px; line-height: 1; color: var(--text-dim);
+  font-variant-emoji: text;          /* never render the heart as a (taller) color emoji */
+  transition: color 0.12s;
+}
+.job-heart:hover { color: var(--job); }
+.job-heart.on { color: var(--job); }
+.job-heart:disabled { opacity: 0.5; cursor: default; }
 .job-title-cell { color: var(--text-secondary); }
 
 .company-group-row td {
@@ -1203,6 +1219,15 @@ textarea.journal-input {
 .entry-item.active { border-color: var(--accent); }
 .entry-date { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); margin-bottom: 4px; }
 .entry-preview { font-size: 12px; color: var(--text-secondary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.session-del {
+  position: absolute; top: 8px; right: 8px; width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; border-radius: 5px; cursor: pointer;
+  font-size: 15px; line-height: 1; color: var(--text-dim); opacity: 0;
+  transition: opacity 0.12s, color 0.12s, background 0.12s;
+}
+.entry-item:hover .session-del { opacity: 1; }
+.session-del:hover { color: var(--danger); background: var(--bg-active, rgba(255,255,255,0.06)); }
 .entry-tags { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
 
 /* ============================================================
@@ -1278,7 +1303,8 @@ textarea.journal-input {
 .cal-day-panel { border-top: 1px solid var(--border-dim); padding-top: 10px; }
 .cal-day-title { font-size: 11px; font-family: var(--font-mono); color: var(--text-secondary); margin-bottom: 8px; }
 .cal-day-empty { font-size: 11px; color: var(--text-dim); }
-.cal-day-event { border-left: 2px solid var(--border-soft); padding: 6px 0 6px 10px; margin-bottom: 6px; }
+.cal-day-event { display: block; width: 100%; text-align: left; background: transparent; border: none; border-left: 2px solid var(--border-soft); padding: 6px 0 6px 10px; margin-bottom: 6px; cursor: pointer; border-radius: 0 4px 4px 0; transition: background 0.1s; }
+.cal-day-event:hover { background: var(--bg-raised); }
 .cal-day-event-time { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); }
 .cal-day-event-title { font-size: 12.5px; color: var(--text-primary); margin: 1px 0; }
 .cal-day-event-src { font-size: 10px; font-family: var(--font-mono); }
@@ -1323,9 +1349,33 @@ textarea.journal-input {
 .noise-toggle:hover { background: var(--bg-hover); color: var(--text-secondary); }
 
 /* right: agent rail */
-.insight-card { background: var(--bg-raised); border: 1px solid var(--border-dim); border-left-width: 2px; border-radius: 8px; padding: 9px 11px; margin-bottom: 9px; }
+.insight-card { display: block; background: var(--bg-raised); border: 1px solid var(--border-dim); border-left-width: 2px; border-radius: 8px; padding: 9px 11px; margin-bottom: 9px; text-decoration: none; }
+.insight-card.link { cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+.insight-card.link:hover { background: var(--bg-hover); border-color: var(--border-mid); }
+.insight-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .insight-kind { font-size: 9px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; }
-.insight-text { font-size: 12px; line-height: 1.5; color: var(--text-primary); margin-top: 4px; }
+.insight-when { font-size: 9.5px; font-family: var(--font-mono); color: var(--text-dim); white-space: nowrap; }
+.insight-text { font-size: 12px; line-height: 1.45; color: var(--text-primary); margin-top: 4px; }
+.insight-sub { font-size: 11px; line-height: 1.4; color: var(--text-secondary); margin-top: 2px; }
+.insight-open { display: inline-block; font-size: 10px; font-family: var(--font-mono); color: var(--email); margin-top: 6px; }
+.insight-expand { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border-dim); }
+.insight-snippet { font-size: 11.5px; line-height: 1.5; color: var(--text-secondary); }
+.insight-snippet.dim { color: var(--text-dim); font-style: italic; }
+.insight-from { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); margin-top: 5px; }
+.cal-ev-detail { margin-top: 7px; padding-top: 7px; border-top: 1px solid var(--border-dim); }
+.cal-ev-blurb { font-size: 11.5px; line-height: 1.5; color: var(--text-secondary); white-space: normal; }
+.insight-scanline { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); padding: 2px 0 8px; border-bottom: 1px solid var(--border-dim); margin-bottom: 10px; }
+
+/* calendar · upcoming list (so the panel shows what's ahead, not just dots) */
+.cal-upcoming { border-top: 1px solid var(--border-dim); padding-top: 10px; margin-top: 12px; }
+.cal-up-title { font-size: 10px; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 8px; }
+.cal-up-row { display: flex; flex-direction: column; gap: 1px; width: 100%; text-align: left; background: transparent; border: none; border-left: 2px solid var(--border-soft); padding: 5px 0 5px 9px; margin-bottom: 7px; cursor: pointer; border-radius: 0 4px 4px 0; transition: background 0.1s; }
+.cal-up-row:hover { background: var(--bg-raised); }
+.cal-up-when { font-size: 10px; font-family: var(--font-mono); color: var(--text-dim); }
+.cal-up-name { font-size: 12px; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-up-src { font-size: 10px; font-family: var(--font-mono); }
+.mail-open { display: inline-block; font-size: 11px; font-family: var(--font-mono); color: var(--email); margin-top: 8px; text-decoration: none; }
+.mail-open:hover { text-decoration: underline; }
 
 @media (max-width: 980px) {
   .tri-panel { flex-direction: column; overflow-y: auto; }
