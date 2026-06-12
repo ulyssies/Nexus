@@ -196,23 +196,72 @@ export function emailRailMeta() {
 
 // ── calendar_events (also written by the email agent: extracted deadlines) ────
 const insertEventStmt = db.prepare(`
-  INSERT INTO calendar_events (title, description, start_at, end_at, all_day, location, source_agent, source_ref)
-  VALUES (@title, @description, @start_at, @end_at, @all_day, @location, @source_agent, @source_ref)`);
+  INSERT INTO calendar_events (title, description, start_at, end_at, all_day, location, source_agent, source_ref, event_key)
+  VALUES (@title, @description, @start_at, @end_at, @all_day, @location, @source_agent, @source_ref, @event_key)`);
 
 // avoid duplicate deadline events when a refresh re-sees the same email
 const eventExistsStmt = db.prepare(
   "SELECT id FROM calendar_events WHERE source_agent = 'email' AND source_ref = ? AND start_at = ?");
 
+// The latest still-relevant email event sharing an identity (event_key) — the row
+// a reschedule should MOVE rather than duplicate. Carries the source email's
+// received_at so we only ever apply the most recent email's time.
+const findEmailEventByKeyStmt = db.prepare(`
+  SELECT c.id, c.start_at, c.source_ref AS prior_ref, f.received_at AS src_received
+    FROM calendar_events c
+    LEFT JOIN email_flags f ON f.id = c.source_ref
+   WHERE c.source_agent = 'email' AND c.event_key = ?
+     AND c.start_at >= datetime('now','-1 day')
+   ORDER BY c.start_at DESC LIMIT 1`);
+
+const supersedeEventStmt = db.prepare(`
+  UPDATE calendar_events
+     SET start_at = @start_at, title = @title, description = @description, source_ref = @source_ref
+   WHERE id = @id`);
+
+// a superseded email's stated deadline is now void — clear it so the old time
+// can't resurface through email_flags (the agent rail's deadline fallback / stats)
+const clearFlagDeadlineStmt = db.prepare('UPDATE email_flags SET deadline_at = NULL WHERE id = ?');
+
+const getEvent = (id) => db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(id);
+
+/**
+ * Add (or move) a calendar event. For email-sourced events with an `event_key`,
+ * a later email about the SAME underlying event reschedules it: we UPDATE the
+ * existing row's time instead of inserting a duplicate, and void the superseded
+ * email's now-stale deadline. `received_at` (the new email's time) is a match
+ * hint, not a stored column — it guards against an out-of-order scan applying an
+ * older email's time over a newer one.
+ */
 export function addCalendarEvent(ev) {
-  if (ev.source_agent === 'email' && ev.source_ref != null) {
-    const dup = eventExistsStmt.get(ev.source_ref, ev.start_at);
-    if (dup) return db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(dup.id);
+  const { received_at = null, ...row } = ev;
+  if (row.source_agent === 'email') {
+    // 1) exact same email + same time already recorded (a plain re-scan) → no-op
+    if (row.source_ref != null) {
+      const dup = eventExistsStmt.get(row.source_ref, row.start_at);
+      if (dup) return getEvent(dup.id);
+    }
+    // 2) reschedule: a follow-up email about the same event moves its time
+    if (row.event_key) {
+      const prior = findEmailEventByKeyStmt.get(row.event_key);
+      if (prior) {
+        if (prior.start_at === row.start_at) return getEvent(prior.id);          // unchanged
+        const newer = !prior.src_received || !received_at || received_at >= prior.src_received;
+        if (!newer) return getEvent(prior.id);                                    // stale email — ignore its time
+        supersedeEventStmt.run({
+          id: prior.id, start_at: row.start_at, title: row.title,
+          description: row.description ?? null, source_ref: row.source_ref ?? null,
+        });
+        if (prior.prior_ref != null && prior.prior_ref !== row.source_ref) clearFlagDeadlineStmt.run(prior.prior_ref);
+        return getEvent(prior.id);
+      }
+    }
   }
   const info = insertEventStmt.run({
     description: null, end_at: null, all_day: 0, location: null,
-    source_agent: 'user', source_ref: null, ...ev,
+    source_agent: 'user', source_ref: null, event_key: null, ...row,
   });
-  return db.prepare('SELECT * FROM calendar_events WHERE id = ?').get(info.lastInsertRowid);
+  return getEvent(info.lastInsertRowid);
 }
 
 /** Upcoming events (today onward), soonest first — the calendar's "upcoming". */

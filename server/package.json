@@ -7,6 +7,7 @@
   "scripts": {
     "dev": "node --watch index.js",
     "start": "node index.js",
+    "test": "node --test \"test/**/*.test.js\"",
     "migrate:jobs": "node scripts/migrate-jobs.js",
     "purge:jobs": "node scripts/purge-stale-jobs.js",
     "gmail:auth": "node scripts/gmail-auth.js",

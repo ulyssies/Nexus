@@ -38,6 +38,13 @@ ensureColumn('notes', 'node_type', 'node_type TEXT');
 // only when the digest is stale (>6h) or the user forces a refresh.
 ensureColumn('morning_brief', 'digest', 'digest TEXT');
 ensureColumn('morning_brief', 'digest_at', 'digest_at TEXT');
+
+// Email-extracted calendar events carry an event_key (the Gmail thread, or
+// company+interview) identifying the underlying real-world event. A follow-up
+// email that reschedules it then UPDATES the existing row's time instead of
+// leaving a stale duplicate behind. See emailRepo.addCalendarEvent().
+ensureColumn('calendar_events', 'event_key', 'event_key TEXT');
+db.prepare('CREATE INDEX IF NOT EXISTS idx_calendar_event_key ON calendar_events(event_key)').run();
 // backfill node_type for pre-existing rows from their kind (one-time, idempotent)
 db.exec(`UPDATE notes SET node_type = CASE kind
            WHEN 'project' THEN 'archivist' ELSE kind END

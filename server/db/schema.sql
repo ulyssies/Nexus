@@ -151,11 +151,16 @@ CREATE TABLE IF NOT EXISTS calendar_events (
   source_agent TEXT NOT NULL DEFAULT 'user'
                  CHECK (source_agent IN ('user','email','job','accountability')),
   source_ref   INTEGER,                          -- e.g. email_flags.id or jobs.id
+  event_key    TEXT,                              -- stable identity of the real-world event
+                                                  --   (Gmail thread, or company+interview) so a
+                                                  --   reschedule email MOVES this row, not duplicates it
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_calendar_start  ON calendar_events(start_at);
 CREATE INDEX IF NOT EXISTS idx_calendar_source ON calendar_events(source_agent);
+-- idx_calendar_event_key lives in the additive migration (db/index.js): on an
+-- existing DB the column is added there, after this schema file has run.
 
 -- ============================================================
 --  GOALS / STREAKS / CHECKINS — accountability agent reads all three.

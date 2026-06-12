@@ -33,6 +33,21 @@ function parseFrom(from) {
 // ISO from Gmail internalDate (ms epoch string)
 const isoFromInternal = (ms) => ms ? new Date(Number(ms)).toISOString() : null;
 
+const slug = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+
+// Stable identity for an extracted event so a follow-up email that reschedules it
+// MOVES the calendar row instead of duplicating it. Interviews key on the company
+// (a reschedule may arrive in a fresh thread); everything else keys on the Gmail
+// thread (reschedules are normally a reply, and this avoids colliding distinct
+// same-company deadlines like an interview vs. a take-home due date).
+export function eventKeyFor(msg, c) {
+  const isInterview = c.statusSignal === 'interviewing'
+    || /interview/i.test(c.category || '') || /interview/i.test(c.deadlineTitle || '');
+  if (isInterview && c.company) return `co:${slug(c.company)}:interview`;
+  if (msg.thread_id) return `thr:${msg.thread_id}`;
+  return null;
+}
+
 // Pull inbox messages as lightweight records. Normally skips already-flagged
 // messages; with reprocess=true it re-reads everything in the window (used by
 // the backfill so previously-flagged application emails get re-evaluated).
@@ -76,7 +91,7 @@ async function classify(messages, runId = null) {
     system: `You triage a job-seeker's inbox. For each email, decide:
 - importance: "urgent" (needs action today / time-sensitive), "important" (matters, not urgent), "normal", or "noise" (newsletters, promos, automated).
 - category: a short freeform label (e.g. "interview", "application", "recruiter", "newsletter", "billing").
-- deadline: ONLY if the email requires YOU to personally act by a specific date — an appointment, interview, application deadline, RSVP, or a bill/payment due date. An ISO 8601 datetime; else null. Do NOT treat marketing or promotional expirations as deadlines ("offer expires", "sale ends", "deal ends soon", coupons, free-credit/bonus promos, limited-time discounts) — those are null. deadlineTitle: a short title for it, else null.
+- deadline: ONLY if the email requires YOU to personally act by a specific date — an appointment, interview, application deadline, RSVP, or a bill/payment due date. An ISO 8601 datetime; else null. If the email RESCHEDULES or moves an existing appointment/interview ("moved to", "rescheduled to", "new time"), use the NEW date/time. Do NOT treat marketing or promotional expirations as deadlines ("offer expires", "sale ends", "deal ends soon", coupons, free-credit/bonus promos, limited-time discounts) — those are null. deadlineTitle: a short title for it, else null.
 - company: if this is about a JOB APPLICATION at a company, the company name; else null.
 - role: if this is about a job application AND a specific job title is mentioned, that title; else null.
 - statusSignal: the application movement this email implies — "applied" (you submitted / application received confirmation), "interviewing" (interview invite/scheduling), "offer", "rejected", or "none".
@@ -182,6 +197,8 @@ export async function runEmailAgent({ trigger = 'cron', scanCount, reprocess = f
         start_at: c.deadline,
         source_agent: 'email',
         source_ref: flag.id,
+        event_key: eventKeyFor(msg, c),   // lets a later reschedule email MOVE this event
+        received_at: msg.received_at,      // match hint: newest email's time wins
       });
       deadlines += 1;
     }
